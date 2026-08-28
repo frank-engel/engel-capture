@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Engel Capture</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1b1b1f">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<style>
+  :root {
+    --bg: #1b1b1f;
+    --panel: #26262c;
+    --text: #eceef2;
+    --muted: #9a9aa4;
+    --accent: #7c9cff;
+    --accent-text: #10101a;
+    --ok: #6fcf97;
+    --err: #eb5757;
+    --border: #38383f;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  body {
+    display: flex; flex-direction: column;
+    max-width: 480px; margin: 0 auto;
+    padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+    min-height: 100%;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 0 8px;
+  }
+  header h1 { font-size: 1.1rem; margin: 0; font-weight: 600; }
+  #settingsBtn {
+    background: none; border: none; color: var(--muted);
+    font-size: 1.3rem; padding: 6px; cursor: pointer; line-height: 1;
+  }
+  main { flex: 1; display: flex; flex-direction: column; gap: 14px; padding-bottom: 24px; }
+
+  .chip-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    flex: 1 1 auto; text-align: center;
+    padding: 10px 8px; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--panel);
+    color: var(--text); font-size: 0.92rem; cursor: pointer;
+    user-select: none;
+  }
+  .chip.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+
+  #categoryRow { display: none; }
+  #categoryRow.show { display: flex; }
+  #categoryRow .chip { flex-basis: 30%; font-size: 0.82rem; padding: 8px 6px; }
+
+  textarea {
+    width: 100%; min-height: 140px; resize: vertical;
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px; font-size: 1rem; font-family: inherit;
+  }
+  textarea:focus { outline: 2px solid var(--accent); }
+
+  button#submitBtn {
+    background: var(--accent); color: var(--accent-text);
+    border: none; border-radius: 10px; padding: 14px;
+    font-size: 1.05rem; font-weight: 700; cursor: pointer;
+  }
+  button#submitBtn:disabled { opacity: 0.5; }
+
+  #status { min-height: 1.4em; font-size: 0.9rem; text-align: center; }
+  #status.ok { color: var(--ok); }
+  #status.err { color: var(--err); }
+  #status.pending { color: var(--muted); }
+
+  dialog {
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px; width: min(92vw, 420px);
+  }
+  dialog::backdrop { background: rgba(0,0,0,0.6); }
+  dialog h2 { margin-top: 0; font-size: 1rem; }
+  dialog label { display: block; font-size: 0.85rem; color: var(--muted); margin-top: 12px; }
+  dialog input {
+    width: 100%; margin-top: 4px; padding: 10px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    font-size: 0.95rem;
+  }
+  dialog p.help { font-size: 0.78rem; color: var(--muted); line-height: 1.4; }
+  .dialog-actions { display: flex; gap: 8px; margin-top: 18px; justify-content: flex-end; }
+  .dialog-actions button {
+    padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); cursor: pointer;
+  }
+  .dialog-actions button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Engel Capture</h1>
+  <button id="settingsBtn" title="Settings" aria-label="Settings">&#9881;</button>
+</header>
+
+<main>
+  <div class="chip-row" id="typeRow">
+    <div class="chip active" data-type="journal">Journal</div>
+    <div class="chip" data-type="prayer">Prayer</div>
+    <div class="chip" data-type="idea">Idea</div>
+    <div class="chip" data-type="task">Task</div>
+    <div class="chip" data-type="note">Note</div>
+  </div>
+
+  <div class="chip-row" id="categoryRow">
+    <div class="chip active" data-category="people">People</div>
+    <div class="chip" data-category="church">Church</div>
+    <div class="chip" data-category="life">Life</div>
+    <div class="chip" data-category="praise">Praise</div>
+    <div class="chip" data-category="pain">Pain</div>
+    <div class="chip" data-category="theodicy">Theodicy</div>
+  </div>
+
+  <textarea id="entryText" placeholder="Type it and go." autofocus></textarea>
+
+  <button id="submitBtn">Capture</button>
+  <div id="status"></div>
+</main>
+
+<dialog id="settingsDialog">
+  <h2>Settings</h2>
+  <label for="tokenInput">GitHub fine-grained PAT</label>
+  <input id="tokenInput" type="password" autocomplete="off" placeholder="github_pat_...">
+  <label for="ownerInput">Repo owner</label>
+  <input id="ownerInput" type="text" placeholder="frank-engel">
+  <label for="repoInput">Repo name</label>
+  <input id="repoInput" type="text" placeholder="Engel-Personal">
+  <p class="help">Stored only in this browser's local storage. Create a fine-grained token scoped to Contents: Read and write on this one repo only, at github.com/settings/personal-access-tokens.</p>
+  <div class="dialog-actions">
+    <button id="clearTokenBtn">Clear</button>
+    <button id="saveSettingsBtn" class="primary">Save</button>
+  </div>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>
