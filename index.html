@@ -57,6 +57,27 @@
   #categoryRow.show { display: flex; }
   #categoryRow .chip { flex-basis: 30%; font-size: 0.82rem; padding: 8px 6px; }
 
+  #taskFields { display: none; flex-direction: column; gap: 10px; }
+  #taskFields.show { display: flex; }
+  #taskFields .field { display: flex; flex-direction: column; gap: 4px; }
+  #taskFields label { font-size: 0.82rem; color: var(--muted); }
+  #taskFields input[type="date"],
+  #taskFields input[type="number"],
+  #taskFields select {
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 10px; font-size: 0.92rem; font-family: inherit;
+  }
+  .repeat-inline { display: flex; gap: 8px; }
+  .repeat-inline input[type="number"] { width: 64px; }
+  .repeat-inline select { flex: 1; }
+  #taskFields input[type="number"]:disabled { opacity: 0.5; }
+  .checkbox-label {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.82rem; color: var(--muted); cursor: pointer;
+  }
+  .checkbox-label input { width: auto; }
+
   textarea {
     width: 100%; min-height: 140px; resize: vertical;
     background: var(--panel); color: var(--text);
@@ -122,6 +143,29 @@
     <div class="chip" data-category="praise">Praise</div>
     <div class="chip" data-category="pain">Pain</div>
     <div class="chip" data-category="theodicy">Theodicy</div>
+  </div>
+
+  <div id="taskFields">
+    <div class="field">
+      <label for="dueDateInput">Due date</label>
+      <input type="date" id="dueDateInput">
+    </div>
+    <div class="field">
+      <label for="recurUnitInput">Repeat every</label>
+      <div class="repeat-inline">
+        <input type="number" id="recurIntervalInput" min="1" value="1" disabled>
+        <select id="recurUnitInput">
+          <option value="">Doesn't repeat</option>
+          <option value="day">day(s)</option>
+          <option value="week">week(s)</option>
+          <option value="month">month(s)</option>
+          <option value="year">year(s)</option>
+        </select>
+      </div>
+      <label class="checkbox-label" id="whenDoneLabel" style="display:none;">
+        <input type="checkbox" id="recurWhenDoneInput"> from completion date, not due date
+      </label>
+    </div>
   </div>
 
   <textarea id="entryText" placeholder="Type it and go." autofocus></textarea>

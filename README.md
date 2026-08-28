@@ -11,6 +11,8 @@ Pick a type, type a sentence, hit Capture:
 - **Journal** → appends a timestamped line into today's `Calendar/YYYY-MM-DD.md` in the vault (creating the file from a minimal template if today's note doesn't exist yet)
 - **Prayer** (with a People/Church/Life/Praise/Pain/Theodicy category), **Idea**, **Task**, **Note** → appends one tagged line to the top of `+ Encounters/Inbox.md` in the vault, for later triage with the vault's `process-captures` Claude Code skill
 
+**Task** also gets an optional due date and repeat interval, written in the [Tasks plugin's](https://publish.obsidian.md/tasks/) own emoji syntax (🔁 recurrence, 📅 due date) so the checkbox is immediately live in any Tasks query — no triage needed for it to work. Recurrence needs a due date to recur from, so the app requires one whenever a repeat interval is set.
+
 ## One-time setup
 
 1. **Create a fine-grained GitHub token**: [github.com/settings/personal-access-tokens](https://github.com/settings/personal-access-tokens) → *Generate new token* → Repository access: **Only select repositories** → `Engel-Personal` → Permissions → **Contents: Read and write**. Nothing else. Copy the token.

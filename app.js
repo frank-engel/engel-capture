@@ -16,6 +16,12 @@ const state = {
 const els = {
   typeRow: document.getElementById("typeRow"),
   categoryRow: document.getElementById("categoryRow"),
+  taskFields: document.getElementById("taskFields"),
+  dueDateInput: document.getElementById("dueDateInput"),
+  recurIntervalInput: document.getElementById("recurIntervalInput"),
+  recurUnitInput: document.getElementById("recurUnitInput"),
+  recurWhenDoneInput: document.getElementById("recurWhenDoneInput"),
+  whenDoneLabel: document.getElementById("whenDoneLabel"),
   entryText: document.getElementById("entryText"),
   submitBtn: document.getElementById("submitBtn"),
   status: document.getElementById("status"),
@@ -71,6 +77,7 @@ els.typeRow.addEventListener("click", (e) => {
   state.type = chip.dataset.type;
   [...els.typeRow.children].forEach((c) => c.classList.toggle("active", c === chip));
   els.categoryRow.classList.toggle("show", state.type === "prayer");
+  els.taskFields.classList.toggle("show", state.type === "task");
 });
 
 els.categoryRow.addEventListener("click", (e) => {
@@ -79,6 +86,22 @@ els.categoryRow.addEventListener("click", (e) => {
   state.category = chip.dataset.category;
   [...els.categoryRow.children].forEach((c) => c.classList.toggle("active", c === chip));
 });
+
+els.recurUnitInput.addEventListener("change", () => {
+  const repeating = !!els.recurUnitInput.value;
+  els.recurIntervalInput.disabled = !repeating;
+  els.whenDoneLabel.style.display = repeating ? "flex" : "none";
+  if (!repeating) els.recurWhenDoneInput.checked = false;
+});
+
+function resetTaskFields() {
+  els.dueDateInput.value = "";
+  els.recurUnitInput.value = "";
+  els.recurIntervalInput.value = "1";
+  els.recurIntervalInput.disabled = true;
+  els.recurWhenDoneInput.checked = false;
+  els.whenDoneLabel.style.display = "none";
+}
 
 function setStatus(msg, kind) {
   els.status.textContent = msg;
@@ -227,7 +250,28 @@ function fallbackInbox() {
   ].join("\n");
 }
 
-async function captureEncounter(type, category, text) {
+// Builds the trailing Tasks-plugin fields for a task line, e.g.
+// " 🔁 every 2 weeks 📅 2026-09-05". Tasks plugin's documented field
+// order is priority, then recurrence, then dates — recurrence before due.
+function buildTaskSuffix() {
+  const due = els.dueDateInput.value;
+  const unit = els.recurUnitInput.value;
+  let suffix = "";
+
+  if (unit) {
+    const interval = Math.max(1, parseInt(els.recurIntervalInput.value, 10) || 1);
+    const unitWord = interval === 1 ? unit : `${unit}s`;
+    const amount = interval === 1 ? "" : `${interval} `;
+    const whenDone = els.recurWhenDoneInput.checked ? " when done" : "";
+    suffix += ` 🔁 every ${amount}${unitWord}${whenDone}`;
+  }
+  if (due) {
+    suffix += ` 📅 ${due}`;
+  }
+  return suffix;
+}
+
+async function captureEncounter(type, category, text, extra) {
   const { date, time } = nowParts();
   const existing = await getFile(ENCOUNTERS_PATH);
 
@@ -242,7 +286,7 @@ async function captureEncounter(type, category, text) {
 
   let line;
   if (type === "task") {
-    line = `- [ ] #capture/task ${date} ${time} — ${text}`;
+    line = `- [ ] #capture/task ${date} ${time} — ${text}${extra || ""}`;
   } else if (type === "prayer") {
     line = `- #capture/prayer/${category} ${date} — ${text}`;
   } else {
@@ -267,12 +311,19 @@ els.submitBtn.addEventListener("click", async () => {
     openSettings();
     return;
   }
+  if (state.type === "task" && els.recurUnitInput.value && !els.dueDateInput.value) {
+    setStatus("Recurring tasks need a due date to recur from.", "err");
+    return;
+  }
 
   els.submitBtn.disabled = true;
   setStatus("Sending…", "pending");
   try {
     if (state.type === "journal") {
       await captureJournal(text);
+    } else if (state.type === "task") {
+      await captureEncounter(state.type, state.category, text, buildTaskSuffix());
+      resetTaskFields();
     } else {
       await captureEncounter(state.type, state.category, text);
     }
