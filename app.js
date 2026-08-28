@@ -175,6 +175,12 @@ function insertUnderHeading(lines, heading, insertLines, atTop) {
 
 function fallbackDailyNote(date) {
   return [
+    "---",
+    'up: "[[Home]]"',
+    `date: ${date}`,
+    "tags:",
+    "  - daily",
+    "---",
     `# ${date}`,
     "",
     JOURNAL_HEADING,
