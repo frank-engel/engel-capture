@@ -13,6 +13,8 @@ Pick a type, type a sentence, hit Capture:
 
 **Task** also gets an optional due date and repeat interval, written in the [Tasks plugin's](https://publish.obsidian.md/tasks/) own emoji syntax (🔁 recurrence, 📅 due date) so the checkbox is immediately live in any Tasks query — no triage needed for it to work. Recurrence needs a due date to recur from, so the app requires one whenever a repeat interval is set.
 
+A 🙏 button next to the settings gear opens a read-only view of `Spaces/Prayer/Prayer List.md`, grouped by whatever `##` categories are currently in the file. That button only renders once a token is saved — with no token configured there's no visible sign the feature exists, so someone picking up the phone without the PAT set up doesn't stumble onto the prayer list.
+
 ## One-time setup
 
 1. **Create a fine-grained GitHub token**: [github.com/settings/personal-access-tokens](https://github.com/settings/personal-access-tokens) → *Generate new token* → Repository access: **Only select repositories** → `Engel-Personal` → Permissions → **Contents: Read and write**. Nothing else. Copy the token.

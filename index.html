@@ -37,11 +37,24 @@
     padding: 16px 0 8px;
   }
   header h1 { font-size: 1.1rem; margin: 0; font-weight: 600; }
-  #settingsBtn {
+  .header-actions { display: flex; align-items: center; gap: 4px; }
+  .icon-btn {
     background: none; border: none; color: var(--muted);
     font-size: 1.3rem; padding: 6px; cursor: pointer; line-height: 1;
   }
   main { flex: 1; display: flex; flex-direction: column; gap: 14px; padding-bottom: 24px; }
+  .view-hidden { display: none; }
+
+  .prayer-toolbar { display: flex; justify-content: space-between; gap: 8px; }
+  .prayer-toolbar button {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 12px; font-size: 0.9rem; cursor: pointer;
+  }
+  #prayerContent h2 { font-size: 0.95rem; margin: 18px 0 6px; color: var(--accent); }
+  #prayerContent h2:first-child { margin-top: 4px; }
+  #prayerContent ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+  #prayerContent li { font-size: 0.92rem; line-height: 1.4; }
+  #prayerContent p.muted { color: var(--muted); font-size: 0.85rem; margin: 0; }
 
   .chip-row { display: flex; gap: 8px; flex-wrap: wrap; }
   .chip {
@@ -124,10 +137,13 @@
 
 <header>
   <h1>Engel Capture</h1>
-  <button id="settingsBtn" title="Settings" aria-label="Settings">&#9881;</button>
+  <div class="header-actions">
+    <button id="prayerNavBtn" class="icon-btn" title="Prayer List" aria-label="Prayer List" hidden>&#128591;</button>
+    <button id="settingsBtn" class="icon-btn" title="Settings" aria-label="Settings">&#9881;</button>
+  </div>
 </header>
 
-<main>
+<main id="captureView">
   <div class="chip-row" id="typeRow">
     <div class="chip active" data-type="journal">Journal</div>
     <div class="chip" data-type="prayer">Prayer</div>
@@ -172,6 +188,15 @@
 
   <button id="submitBtn">Capture</button>
   <div id="status"></div>
+</main>
+
+<main id="prayerView" class="view-hidden">
+  <div class="prayer-toolbar">
+    <button id="prayerBackBtn">&larr; Back</button>
+    <button id="prayerRefreshBtn">Refresh</button>
+  </div>
+  <div id="prayerStatus"></div>
+  <div id="prayerContent"></div>
 </main>
 
 <dialog id="settingsDialog">

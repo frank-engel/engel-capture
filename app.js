@@ -7,6 +7,7 @@ const DEFAULT_REPO = "Engel-Personal";
 const ENCOUNTERS_PATH = "+ Encounters/Inbox.md";
 const CAPTURES_HEADING = "## Captures";
 const JOURNAL_HEADING = "## Journal";
+const PRAYER_LIST_PATH = "Spaces/Prayer/Prayer List.md";
 
 const state = {
   type: "journal",
@@ -32,6 +33,13 @@ const els = {
   repoInput: document.getElementById("repoInput"),
   saveSettingsBtn: document.getElementById("saveSettingsBtn"),
   clearTokenBtn: document.getElementById("clearTokenBtn"),
+  captureView: document.getElementById("captureView"),
+  prayerView: document.getElementById("prayerView"),
+  prayerNavBtn: document.getElementById("prayerNavBtn"),
+  prayerBackBtn: document.getElementById("prayerBackBtn"),
+  prayerRefreshBtn: document.getElementById("prayerRefreshBtn"),
+  prayerStatus: document.getElementById("prayerStatus"),
+  prayerContent: document.getElementById("prayerContent"),
 };
 
 // ---------- settings ----------
@@ -52,6 +60,13 @@ function openSettings() {
   els.settingsDialog.showModal();
 }
 
+// The Prayer List nav button only appears once a token is saved — no
+// dangling affordance hinting at prayer content for anyone picking up
+// the phone without it configured.
+function updateNavVisibility() {
+  els.prayerNavBtn.hidden = !getSettings().token;
+}
+
 els.settingsBtn.addEventListener("click", openSettings);
 
 els.saveSettingsBtn.addEventListener("click", (e) => {
@@ -61,13 +76,18 @@ els.saveSettingsBtn.addEventListener("click", (e) => {
   localStorage.setItem("ec_repo", els.repoInput.value.trim() || DEFAULT_REPO);
   els.settingsDialog.close();
   setStatus("Settings saved.", "ok");
+  updateNavVisibility();
 });
 
 els.clearTokenBtn.addEventListener("click", (e) => {
   e.preventDefault();
   localStorage.removeItem("ec_token");
   els.tokenInput.value = "";
+  updateNavVisibility();
+  if (!els.prayerView.classList.contains("view-hidden")) showView("capture");
 });
+
+updateNavVisibility();
 
 // ---------- UI ----------
 
@@ -107,6 +127,93 @@ function setStatus(msg, kind) {
   els.status.textContent = msg;
   els.status.className = kind || "";
 }
+
+// ---------- prayer list view ----------
+
+function showView(view) {
+  els.captureView.classList.toggle("view-hidden", view !== "capture");
+  els.prayerView.classList.toggle("view-hidden", view !== "prayer");
+}
+
+function setPrayerStatus(msg, kind) {
+  els.prayerStatus.textContent = msg;
+  els.prayerStatus.className = kind || "";
+}
+
+// Groups lines under each "## Heading" into { title, items }. Reads
+// whatever headings are actually in the file rather than a hardcoded
+// category list, so renaming/adding a category on the Prayer List needs
+// no matching change here.
+function parsePrayerList(md) {
+  const sections = [];
+  let current = null;
+  for (const line of md.split("\n")) {
+    const heading = /^##\s+(.*)/.exec(line);
+    if (heading) {
+      current = { title: heading[1].trim(), items: [] };
+      sections.push(current);
+      continue;
+    }
+    if (!current) continue;
+    const item = /^-\s+(.*)/.exec(line);
+    if (item) current.items.push(item[1].trim());
+  }
+  return sections;
+}
+
+function renderPrayerList(sections) {
+  els.prayerContent.innerHTML = "";
+  if (!sections.length) {
+    const p = document.createElement("p");
+    p.className = "muted";
+    p.textContent = "No categories found.";
+    els.prayerContent.appendChild(p);
+    return;
+  }
+  for (const section of sections) {
+    const h2 = document.createElement("h2");
+    h2.textContent = section.title;
+    els.prayerContent.appendChild(h2);
+    if (!section.items.length) {
+      const p = document.createElement("p");
+      p.className = "muted";
+      p.textContent = "Nothing here.";
+      els.prayerContent.appendChild(p);
+      continue;
+    }
+    const ul = document.createElement("ul");
+    for (const item of section.items) {
+      const li = document.createElement("li");
+      li.textContent = item; // textContent, not innerHTML — entries are untrusted text
+      ul.appendChild(li);
+    }
+    els.prayerContent.appendChild(ul);
+  }
+}
+
+async function loadPrayerList() {
+  setPrayerStatus("Loading…", "pending");
+  els.prayerContent.innerHTML = "";
+  try {
+    const file = await getFile(PRAYER_LIST_PATH);
+    if (!file) {
+      setPrayerStatus("Prayer List.md not found.", "err");
+      return;
+    }
+    renderPrayerList(parsePrayerList(file.content));
+    setPrayerStatus("", "");
+  } catch (err) {
+    console.error(err);
+    setPrayerStatus("Failed to load — check your token/settings.", "err");
+  }
+}
+
+els.prayerNavBtn.addEventListener("click", () => {
+  showView("prayer");
+  loadPrayerList();
+});
+els.prayerBackBtn.addEventListener("click", () => showView("capture"));
+els.prayerRefreshBtn.addEventListener("click", loadPrayerList);
 
 // ---------- time ----------
 
