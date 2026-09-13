@@ -391,6 +391,19 @@ function buildTaskSuffix() {
   return suffix;
 }
 
+// Splits multi-line text into a properly-indented Markdown list item: the
+// first physical line carries the prefix (and, for tasks, the trailing
+// metadata so the Tasks plugin still sees it on the task's own line), and
+// any further lines are indented two spaces so they read as a continuation
+// of the same bullet instead of breaking the list — and so a later parse
+// can tell them apart from unrelated content that follows.
+function buildCaptureLines(prefix, text, suffix) {
+  const [first, ...rest] = text.split("\n");
+  const firstLine = prefix + first + (suffix || "");
+  const restLines = rest.map((l) => (l ? `  ${l}` : ""));
+  return [firstLine, ...restLines];
+}
+
 async function captureEncounter(type, category, text, extra) {
   const { date, time } = nowParts();
   const existing = await getFile(ENCOUNTERS_PATH);
@@ -404,31 +417,38 @@ async function captureEncounter(type, category, text, extra) {
     sha = null;
   }
 
-  let line;
+  let prefix;
   if (type === "task") {
-    line = `- [ ] #capture/task ${date} ${time} — ${text}${extra || ""}`;
+    prefix = `- [ ] #capture/task ${date} ${time} — `;
   } else if (type === "prayer") {
-    line = `- #capture/prayer/${category} ${date} — ${text}`;
+    prefix = `- #capture/prayer/${category} ${date} — `;
   } else {
-    line = `- #capture/${type} ${date} — ${text}`;
+    prefix = `- #capture/${type} ${date} — `;
   }
 
-  const updated = insertUnderHeading(lines, CAPTURES_HEADING, [line], true);
+  const entryLines = buildCaptureLines(prefix, text, extra);
+  const updated = insertUnderHeading(lines, CAPTURES_HEADING, entryLines, true);
   await putFile(ENCOUNTERS_PATH, updated.join("\n"), sha, `Capture (${type}): ${date} ${time}`);
 }
 
 // ---------- recent notes ----------
 //
-// A capture's text can itself contain newlines (multi-line textarea input),
-// so one capture occupies a block of physical file lines, not just one.
-// Blocks are delimited by the next line that starts a new capture entry
-// (any type — captures of different types are interleaved under the same
-// heading) or by the end of the section.
+// A capture's text can itself contain newlines (multi-line textarea input).
+// captureEncounter writes those as an indented list continuation (two
+// leading spaces), so a block's continuation lines are exactly the ones
+// that are blank or indented — anything else (unrelated vault content,
+// another capture, a heading) ends the block. Without the indent check
+// this would happily swallow everything up to the next heading, capture
+// or not.
 
 const NOTE_LINE_RE = /^- #capture\/note \d{4}-\d{2}-\d{2} — /;
 const CAPTURE_START_RE = /^-\s(?:\[.\]\s)?#capture\//;
 
 let currentNoteBlocks = [];
+
+function isBlockContinuation(line) {
+  return line === "" || line.startsWith("  ");
+}
 
 function capturesSection(content) {
   const lines = content.split("\n");
@@ -448,8 +468,10 @@ function captureBlocks(section) {
     if (CAPTURE_START_RE.test(line)) {
       current = [line];
       blocks.push(current);
-    } else if (current) {
+    } else if (current && isBlockContinuation(line)) {
       current.push(line);
+    } else {
+      current = null;
     }
   }
   return blocks;
@@ -462,9 +484,8 @@ function parseRecentNotes(content) {
 }
 
 function blockText(block) {
-  return [block[0].replace(NOTE_LINE_RE, ""), ...block.slice(1)]
-    .join("\n")
-    .trimEnd();
+  const rest = block.slice(1).map((l) => (l.startsWith("  ") ? l.slice(2) : l));
+  return [block[0].replace(NOTE_LINE_RE, ""), ...rest].join("\n").trimEnd();
 }
 
 function findBlockIndex(lines, block) {
@@ -532,8 +553,7 @@ async function updateNote(oldBlock, newText) {
   const idx = findBlockIndex(lines, oldBlock);
   if (idx === -1) throw new Error("Note not found — it may have changed.");
   const prefix = oldBlock[0].match(NOTE_LINE_RE)[0];
-  const newLines = newText.split("\n");
-  newLines[0] = prefix + newLines[0];
+  const newLines = buildCaptureLines(prefix, newText);
   lines.splice(idx, oldBlock.length, ...newLines);
   const { date, time } = nowParts();
   await putFile(ENCOUNTERS_PATH, lines.join("\n"), existing.sha, `Update note: ${date} ${time}`);
