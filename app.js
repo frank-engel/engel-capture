@@ -12,6 +12,7 @@ const PRAYER_LIST_PATH = "Spaces/Prayer/Prayer List.md";
 const state = {
   type: "journal",
   category: "people",
+  editingNoteLine: null,
 };
 
 const els = {
@@ -24,6 +25,9 @@ const els = {
   recurWhenDoneInput: document.getElementById("recurWhenDoneInput"),
   whenDoneLabel: document.getElementById("whenDoneLabel"),
   entryText: document.getElementById("entryText"),
+  recentNotes: document.getElementById("recentNotes"),
+  recentNotesList: document.getElementById("recentNotesList"),
+  cancelEditLink: document.getElementById("cancelEditLink"),
   submitBtn: document.getElementById("submitBtn"),
   status: document.getElementById("status"),
   settingsBtn: document.getElementById("settingsBtn"),
@@ -95,9 +99,18 @@ els.typeRow.addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");
   if (!chip) return;
   state.type = chip.dataset.type;
+  setEditingNote(null);
   [...els.typeRow.children].forEach((c) => c.classList.toggle("active", c === chip));
   els.categoryRow.classList.toggle("show", state.type === "prayer");
   els.taskFields.classList.toggle("show", state.type === "task");
+  els.recentNotes.classList.toggle("show", state.type === "note");
+  if (state.type === "note") loadRecentNotes();
+});
+
+els.cancelEditLink.addEventListener("click", (e) => {
+  e.preventDefault();
+  setEditingNote(null);
+  els.entryText.value = "";
 });
 
 els.categoryRow.addEventListener("click", (e) => {
@@ -404,6 +417,87 @@ async function captureEncounter(type, category, text, extra) {
   await putFile(ENCOUNTERS_PATH, updated.join("\n"), sha, `Capture (${type}): ${date} ${time}`);
 }
 
+// ---------- recent notes ----------
+
+const NOTE_LINE_RE = /^- #capture\/note \d{4}-\d{2}-\d{2} — /;
+
+function parseRecentNotes(content) {
+  const lines = content.split("\n");
+  const headingIdx = lines.findIndex((l) => l.trim() === CAPTURES_HEADING);
+  if (headingIdx === -1) return [];
+  let nextHeadingIdx = lines.findIndex(
+    (l, i) => i > headingIdx && /^#{1,6}\s/.test(l)
+  );
+  if (nextHeadingIdx === -1) nextHeadingIdx = lines.length;
+  return lines
+    .slice(headingIdx + 1, nextHeadingIdx)
+    .filter((l) => NOTE_LINE_RE.test(l));
+}
+
+function noteText(line) {
+  return line.replace(NOTE_LINE_RE, "");
+}
+
+function setEditingNote(line) {
+  state.editingNoteLine = line;
+  els.cancelEditLink.style.display = line ? "inline" : "none";
+  [...els.recentNotesList.children].forEach((c) => {
+    c.classList.toggle("editing", c.dataset.line === line);
+  });
+}
+
+function renderRecentNotes(lines) {
+  els.recentNotesList.innerHTML = "";
+  if (!lines.length) {
+    const empty = document.createElement("div");
+    empty.className = "recent-notes-empty";
+    empty.textContent = "No notes yet.";
+    els.recentNotesList.appendChild(empty);
+    return;
+  }
+  lines.slice(0, 15).forEach((line) => {
+    const item = document.createElement("div");
+    item.className = "recent-note-item";
+    item.dataset.line = line;
+    item.textContent = noteText(line).replace(/\n/g, " ");
+    if (line === state.editingNoteLine) item.classList.add("editing");
+    item.addEventListener("click", () => {
+      els.entryText.value = noteText(line);
+      setEditingNote(line);
+      els.entryText.focus();
+    });
+    els.recentNotesList.appendChild(item);
+  });
+}
+
+async function loadRecentNotes() {
+  const { token } = getSettings();
+  if (!token) {
+    els.recentNotesList.innerHTML = '<div class="recent-notes-empty">Set up your GitHub token to see recent notes.</div>';
+    return;
+  }
+  els.recentNotesList.innerHTML = '<div class="recent-notes-empty">Loading…</div>';
+  try {
+    const existing = await getFile(ENCOUNTERS_PATH);
+    renderRecentNotes(existing ? parseRecentNotes(existing.content) : []);
+  } catch (err) {
+    console.error(err);
+    els.recentNotesList.innerHTML = '<div class="recent-notes-empty">Couldn\'t load notes.</div>';
+  }
+}
+
+async function updateNote(oldLine, newText) {
+  const existing = await getFile(ENCOUNTERS_PATH);
+  if (!existing) throw new Error("Inbox not found");
+  const lines = existing.content.split("\n");
+  const idx = lines.indexOf(oldLine);
+  if (idx === -1) throw new Error("Note not found — it may have changed.");
+  const prefix = oldLine.match(NOTE_LINE_RE)[0];
+  lines[idx] = prefix + newText;
+  const { date, time } = nowParts();
+  await putFile(ENCOUNTERS_PATH, lines.join("\n"), existing.sha, `Update note: ${date} ${time}`);
+}
+
 // ---------- submit ----------
 
 els.submitBtn.addEventListener("click", async () => {
@@ -431,8 +525,13 @@ els.submitBtn.addEventListener("click", async () => {
     } else if (state.type === "task") {
       await captureEncounter(state.type, state.category, text, buildTaskSuffix());
       resetTaskFields();
+    } else if (state.type === "note" && state.editingNoteLine) {
+      await updateNote(state.editingNoteLine, text);
+      setEditingNote(null);
+      await loadRecentNotes();
     } else {
       await captureEncounter(state.type, state.category, text);
+      if (state.type === "note") await loadRecentNotes();
     }
     els.entryText.value = "";
     setStatus("Captured.", "ok");

@@ -92,12 +92,28 @@
   .checkbox-label input { width: auto; }
 
   textarea {
-    width: 100%; min-height: 140px; resize: vertical;
+    width: 100%; min-height: 280px; resize: vertical;
     background: var(--panel); color: var(--text);
     border: 1px solid var(--border); border-radius: 10px;
     padding: 12px; font-size: 1rem; font-family: inherit;
   }
   textarea:focus { outline: 2px solid var(--accent); }
+
+  #recentNotes { display: none; flex-direction: column; gap: 6px; }
+  #recentNotes.show { display: flex; }
+  #recentNotes .recent-notes-label {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 0.82rem; color: var(--muted);
+  }
+  #recentNotes .recent-notes-label a { color: var(--accent); text-decoration: none; }
+  #recentNotesList { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
+  .recent-note-item {
+    padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); font-size: 0.88rem; cursor: pointer;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .recent-note-item.editing { border-color: var(--accent); }
+  .recent-notes-empty { font-size: 0.82rem; color: var(--muted); }
 
   button#submitBtn {
     background: var(--accent); color: var(--accent-text);
@@ -185,6 +201,14 @@
   </div>
 
   <textarea id="entryText" placeholder="Type it and go." autofocus></textarea>
+
+  <div id="recentNotes">
+    <div class="recent-notes-label">
+      <span>Recent Notes</span>
+      <a href="#" id="cancelEditLink" style="display:none;">Cancel edit</a>
+    </div>
+    <div id="recentNotesList"></div>
+  </div>
 
   <button id="submitBtn">Capture</button>
   <div id="status"></div>
