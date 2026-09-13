@@ -12,7 +12,7 @@ const PRAYER_LIST_PATH = "Spaces/Prayer/Prayer List.md";
 const state = {
   type: "journal",
   category: "people",
-  editingNoteLine: null,
+  editingNoteBlock: null,
 };
 
 const els = {
@@ -418,10 +418,19 @@ async function captureEncounter(type, category, text, extra) {
 }
 
 // ---------- recent notes ----------
+//
+// A capture's text can itself contain newlines (multi-line textarea input),
+// so one capture occupies a block of physical file lines, not just one.
+// Blocks are delimited by the next line that starts a new capture entry
+// (any type — captures of different types are interleaved under the same
+// heading) or by the end of the section.
 
 const NOTE_LINE_RE = /^- #capture\/note \d{4}-\d{2}-\d{2} — /;
+const CAPTURE_START_RE = /^-\s(?:\[.\]\s)?#capture\//;
 
-function parseRecentNotes(content) {
+let currentNoteBlocks = [];
+
+function capturesSection(content) {
   const lines = content.split("\n");
   const headingIdx = lines.findIndex((l) => l.trim() === CAPTURES_HEADING);
   if (headingIdx === -1) return [];
@@ -429,41 +438,71 @@ function parseRecentNotes(content) {
     (l, i) => i > headingIdx && /^#{1,6}\s/.test(l)
   );
   if (nextHeadingIdx === -1) nextHeadingIdx = lines.length;
-  return lines
-    .slice(headingIdx + 1, nextHeadingIdx)
-    .filter((l) => NOTE_LINE_RE.test(l));
+  return lines.slice(headingIdx + 1, nextHeadingIdx);
 }
 
-function noteText(line) {
-  return line.replace(NOTE_LINE_RE, "");
+function captureBlocks(section) {
+  const blocks = [];
+  let current = null;
+  for (const line of section) {
+    if (CAPTURE_START_RE.test(line)) {
+      current = [line];
+      blocks.push(current);
+    } else if (current) {
+      current.push(line);
+    }
+  }
+  return blocks;
 }
 
-function setEditingNote(line) {
-  state.editingNoteLine = line;
-  els.cancelEditLink.style.display = line ? "inline" : "none";
-  [...els.recentNotesList.children].forEach((c) => {
-    c.classList.toggle("editing", c.dataset.line === line);
+function parseRecentNotes(content) {
+  return captureBlocks(capturesSection(content)).filter((block) =>
+    NOTE_LINE_RE.test(block[0])
+  );
+}
+
+function blockText(block) {
+  return [block[0].replace(NOTE_LINE_RE, ""), ...block.slice(1)]
+    .join("\n")
+    .trimEnd();
+}
+
+function findBlockIndex(lines, block) {
+  outer: for (let i = 0; i <= lines.length - block.length; i++) {
+    for (let j = 0; j < block.length; j++) {
+      if (lines[i + j] !== block[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
+}
+
+function setEditingNote(block) {
+  state.editingNoteBlock = block;
+  els.cancelEditLink.style.display = block ? "inline" : "none";
+  [...els.recentNotesList.children].forEach((c, i) => {
+    c.classList.toggle("editing", currentNoteBlocks[i] === block);
   });
 }
 
-function renderRecentNotes(lines) {
+function renderRecentNotes(blocks) {
+  currentNoteBlocks = blocks.slice(0, 15);
   els.recentNotesList.innerHTML = "";
-  if (!lines.length) {
+  if (!currentNoteBlocks.length) {
     const empty = document.createElement("div");
     empty.className = "recent-notes-empty";
     empty.textContent = "No notes yet.";
     els.recentNotesList.appendChild(empty);
     return;
   }
-  lines.slice(0, 15).forEach((line) => {
+  currentNoteBlocks.forEach((block) => {
     const item = document.createElement("div");
     item.className = "recent-note-item";
-    item.dataset.line = line;
-    item.textContent = noteText(line).replace(/\n/g, " ");
-    if (line === state.editingNoteLine) item.classList.add("editing");
+    item.textContent = blockText(block).replace(/\n/g, " ↵ ");
+    if (block === state.editingNoteBlock) item.classList.add("editing");
     item.addEventListener("click", () => {
-      els.entryText.value = noteText(line);
-      setEditingNote(line);
+      els.entryText.value = blockText(block);
+      setEditingNote(block);
       els.entryText.focus();
     });
     els.recentNotesList.appendChild(item);
@@ -486,14 +525,16 @@ async function loadRecentNotes() {
   }
 }
 
-async function updateNote(oldLine, newText) {
+async function updateNote(oldBlock, newText) {
   const existing = await getFile(ENCOUNTERS_PATH);
   if (!existing) throw new Error("Inbox not found");
   const lines = existing.content.split("\n");
-  const idx = lines.indexOf(oldLine);
+  const idx = findBlockIndex(lines, oldBlock);
   if (idx === -1) throw new Error("Note not found — it may have changed.");
-  const prefix = oldLine.match(NOTE_LINE_RE)[0];
-  lines[idx] = prefix + newText;
+  const prefix = oldBlock[0].match(NOTE_LINE_RE)[0];
+  const newLines = newText.split("\n");
+  newLines[0] = prefix + newLines[0];
+  lines.splice(idx, oldBlock.length, ...newLines);
   const { date, time } = nowParts();
   await putFile(ENCOUNTERS_PATH, lines.join("\n"), existing.sha, `Update note: ${date} ${time}`);
 }
@@ -525,8 +566,8 @@ els.submitBtn.addEventListener("click", async () => {
     } else if (state.type === "task") {
       await captureEncounter(state.type, state.category, text, buildTaskSuffix());
       resetTaskFields();
-    } else if (state.type === "note" && state.editingNoteLine) {
-      await updateNote(state.editingNoteLine, text);
+    } else if (state.type === "note" && state.editingNoteBlock) {
+      await updateNote(state.editingNoteBlock, text);
       setEditingNote(null);
       await loadRecentNotes();
     } else {
