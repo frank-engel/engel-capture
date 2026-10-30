@@ -122,6 +122,14 @@
   }
   button#submitBtn:disabled { opacity: 0.5; }
 
+  #checkinRow { display: none; align-items: center; }
+  #checkinRow.show { display: flex; }
+  #checkinRow .checkin-label { font-size: 0.82rem; color: var(--muted); margin-right: 2px; }
+  #checkinRow .chip { flex: 0 1 auto; font-size: 0.82rem; padding: 7px 12px; color: var(--muted); }
+  #checkinRow .chip:active { background: var(--accent); color: var(--accent-text); }
+
+  #status a { color: var(--accent); }
+
   #status { min-height: 1.4em; font-size: 0.9rem; text-align: center; }
   #status.ok { color: var(--ok); }
   #status.err { color: var(--err); }
@@ -147,6 +155,8 @@
     border: 1px solid var(--border); background: var(--bg); color: var(--text);
     font-size: 0.95rem;
   }
+  dialog label.checkbox-row { display: flex; align-items: center; gap: 8px; color: var(--text); }
+  dialog label.checkbox-row input { width: auto; margin: 0; }
   dialog p.help { font-size: 0.78rem; color: var(--muted); line-height: 1.4; }
   .dialog-actions { display: flex; gap: 8px; margin-top: 18px; justify-content: flex-end; }
   .dialog-actions button {
@@ -219,6 +229,14 @@
   </div>
 
   <button id="submitBtn">Capture</button>
+
+  <div class="chip-row show" id="checkinRow">
+    <span class="checkin-label">Check in:</span>
+    <div class="chip" data-practice="daily-office">Daily Office</div>
+    <div class="chip" data-practice="lectio">Lectio</div>
+    <div class="chip" data-practice="workout">Workout</div>
+  </div>
+
   <div id="status"></div>
 </main>
 
@@ -239,6 +257,8 @@
   <input id="ownerInput" type="text" placeholder="frank-engel">
   <label for="repoInput">Repo name</label>
   <input id="repoInput" type="text" placeholder="Engel-Personal">
+  <label class="checkbox-row"><input type="checkbox" id="oneByOneInput"> Send each capture separately (the old way)</label>
+  <p class="help">Off: everything waiting goes to the vault as one commit. On: one commit per capture, exactly like before the local database. A fallback if syncing ever misbehaves.</p>
   <p class="help">Stored only in this browser's local storage. Create a fine-grained token scoped to Contents: Read and write on this one repo only, at github.com/settings/personal-access-tokens.</p>
   <div class="dialog-actions">
     <button id="clearTokenBtn">Clear</button>
