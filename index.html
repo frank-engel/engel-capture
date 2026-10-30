@@ -127,6 +127,13 @@
   #status.err { color: var(--err); }
   #status.pending { color: var(--muted); }
 
+  .pending-pill {
+    background: transparent; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 999px;
+    padding: 4px 10px; font-size: 0.8rem; cursor: pointer; margin-right: 4px;
+  }
+  .pending-pill[hidden] { display: none; }
+
   dialog {
     background: var(--panel); color: var(--text);
     border: 1px solid var(--border); border-radius: 12px;
@@ -154,6 +161,7 @@
 <header>
   <h1>Engel Capture</h1>
   <div class="header-actions">
+    <button id="pendingBtn" class="pending-pill" hidden>&#8635; <span id="pendingCount">0</span></button>
     <button id="prayerNavBtn" class="icon-btn" title="Prayer List" aria-label="Prayer List" hidden>&#128591;</button>
     <button id="settingsBtn" class="icon-btn" title="Settings" aria-label="Settings">&#9881;</button>
   </div>

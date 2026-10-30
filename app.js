@@ -44,6 +44,8 @@ const els = {
   prayerRefreshBtn: document.getElementById("prayerRefreshBtn"),
   prayerStatus: document.getElementById("prayerStatus"),
   prayerContent: document.getElementById("prayerContent"),
+  pendingBtn: document.getElementById("pendingBtn"),
+  pendingCount: document.getElementById("pendingCount"),
 };
 
 // ---------- settings ----------
@@ -81,6 +83,7 @@ els.saveSettingsBtn.addEventListener("click", (e) => {
   els.settingsDialog.close();
   setStatus("Settings saved.", "ok");
   updateNavVisibility();
+  flushOutbox();
 });
 
 els.clearTokenBtn.addEventListener("click", (e) => {
@@ -337,8 +340,10 @@ function fallbackDailyNote(date) {
   ].join("\n");
 }
 
-async function captureJournal(text) {
-  const { date, time } = nowParts();
+// `when` is the { date, time } the entry was written, not sent — an entry
+// that sat in the outbox overnight still lands in the day it was written.
+async function captureJournal(text, when) {
+  const { date, time } = when;
   const path = `Calendar/${date}.md`;
   const existing = await getFile(path);
 
@@ -404,8 +409,8 @@ function buildCaptureLines(prefix, text, suffix) {
   return [firstLine, ...restLines];
 }
 
-async function captureEncounter(type, category, text, extra) {
-  const { date, time } = nowParts();
+async function captureEncounter(type, category, text, extra, when) {
+  const { date, time } = when;
   const existing = await getFile(ENCOUNTERS_PATH);
 
   let lines, sha;
@@ -559,7 +564,187 @@ async function updateNote(oldBlock, newText) {
   await putFile(ENCOUNTERS_PATH, lines.join("\n"), existing.sha, `Update note: ${date} ${time}`);
 }
 
+// ---------- outbox ----------
+//
+// Every new capture is written to IndexedDB first and then sent, so the
+// text is safe on the device before any network call happens. A failed or
+// offline send just leaves it queued; flushOutbox() retries on app open,
+// reconnect, returning to the tab, saving settings, a tap on the pending
+// badge, and once a minute while anything is waiting. Entries are sent
+// oldest first and a failure stops the run, so captures land in the order
+// they were written. Nothing is ever dropped from the queue except by a
+// successful send.
+//
+// Note edits are not queued: they splice into a block that might have
+// changed by the time a retry runs, and the Recent Notes list they edit
+// needs the network to load anyway.
+
+const DB_NAME = "engel-capture";
+const OUTBOX_STORE = "outbox";
+const RETRY_INTERVAL_MS = 60 * 1000;
+
+let dbPromise = null;
+let flushChain = Promise.resolve();
+let lastSendError = null;
+
+function openDb() {
+  if (!dbPromise) {
+    dbPromise = new Promise((resolve, reject) => {
+      if (!("indexedDB" in window)) {
+        reject(new Error("IndexedDB unavailable"));
+        return;
+      }
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        req.result.createObjectStore(OUTBOX_STORE, { keyPath: "id", autoIncrement: true });
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    dbPromise.catch(() => { dbPromise = null; });
+  }
+  return dbPromise;
+}
+
+async function outboxRequest(mode, fn) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(OUTBOX_STORE, mode);
+    const req = fn(tx.objectStore(OUTBOX_STORE));
+    let result;
+    req.onsuccess = () => { result = req.result; };
+    tx.oncomplete = () => resolve(result);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
+const outboxAdd = (entry) => outboxRequest("readwrite", (s) => s.add(entry));
+const outboxAll = () => outboxRequest("readonly", (s) => s.getAll()); // key order = oldest first
+const outboxDelete = (id) => outboxRequest("readwrite", (s) => s.delete(id));
+const outboxCount = () => outboxRequest("readonly", (s) => s.count());
+
+// Everything needed to send the capture later, frozen at the moment it was
+// written — including task fields, which get reset as soon as it's queued.
+function buildOutboxEntry(text) {
+  return {
+    type: state.type,
+    category: state.category,
+    text,
+    suffix: state.type === "task" ? buildTaskSuffix() : "",
+    when: nowParts(),
+    createdAt: Date.now(),
+  };
+}
+
+function sendEntry(entry) {
+  if (entry.type === "journal") return captureJournal(entry.text, entry.when);
+  return captureEncounter(entry.type, entry.category, entry.text, entry.suffix, entry.when);
+}
+
+async function updatePendingBadge() {
+  let n = 0;
+  try { n = await outboxCount(); } catch { /* no IndexedDB: nothing can be pending */ }
+  els.pendingBtn.hidden = n === 0;
+  els.pendingCount.textContent = String(n);
+  els.pendingBtn.title = n === 1 ? "1 capture waiting to send — tap to retry" : `${n} captures waiting to send — tap to retry`;
+  return n;
+}
+
+// Sends queued captures oldest first and resolves to the ids that went
+// through. Calls are chained rather than skipped while one is running, so a
+// capture made mid-retry still gets its own pass instead of looking stuck.
+function flushOutbox() {
+  const run = flushChain.then(runFlush);
+  flushChain = run.catch(() => {});
+  return run;
+}
+
+async function runFlush() {
+  const sent = new Set();
+  if (!getSettings().token) {
+    await updatePendingBadge();
+    return sent;
+  }
+  try {
+    const run = async () => {
+      for (const entry of await outboxAll()) {
+        try {
+          await sendEntry(entry);
+        } catch (err) {
+          console.error(err);
+          lastSendError = err;
+          break;
+        }
+        await outboxDelete(entry.id);
+        sent.add(entry.id);
+        lastSendError = null;
+      }
+    };
+    // Web Locks keep two open tabs from sending the same entry twice.
+    if (navigator.locks) await navigator.locks.request("engel-capture-outbox", run);
+    else await run();
+  } catch (err) {
+    console.error(err);
+  }
+  const remaining = await updatePendingBadge();
+  // A submit that sent straight through overwrites this with "Captured."
+  if (sent.size && remaining === 0) {
+    setStatus(sent.size === 1 ? "Queued capture sent." : `${sent.size} queued captures sent.`, "ok");
+  }
+  return sent;
+}
+
+// A 401/403/404 almost always means the token or repo settings are wrong,
+// so say so. Anything else (no network, 5xx, a sha race) just needs a retry.
+function queuedMessage() {
+  if (!getSettings().token) return "Saved on this device — add your GitHub token to send it.";
+  const m = lastSendError && /failed: (\d{3})/.exec(lastSendError.message);
+  if (m && ["401", "403", "404"].includes(m[1])) {
+    return "Saved on this device — GitHub refused it, check your token/settings.";
+  }
+  return navigator.onLine === false
+    ? "Saved offline — will send when you're back online."
+    : "Saved on this device — will retry shortly.";
+}
+
+function setQueuedStatus() {
+  setStatus(queuedMessage(), "pending");
+}
+
+els.pendingBtn.addEventListener("click", async () => {
+  setStatus("Retrying…", "pending");
+  await flushOutbox();
+  if (await updatePendingBadge()) setQueuedStatus();
+});
+
+window.addEventListener("online", flushOutbox);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") flushOutbox();
+});
+setInterval(async () => {
+  if (document.visibilityState === "visible" && !els.pendingBtn.hidden) flushOutbox();
+}, RETRY_INTERVAL_MS);
+flushOutbox();
+
 // ---------- submit ----------
+
+async function submitNoteEdit(text) {
+  els.submitBtn.disabled = true;
+  setStatus("Sending…", "pending");
+  try {
+    await updateNote(state.editingNoteBlock, text);
+    setEditingNote(null);
+    await loadRecentNotes();
+    els.entryText.value = "";
+    setStatus("Captured.", "ok");
+  } catch (err) {
+    console.error(err);
+    setStatus("Failed — check your token/settings and try again.", "err");
+  } finally {
+    els.submitBtn.disabled = false;
+  }
+}
 
 els.submitBtn.addEventListener("click", async () => {
   const text = els.entryText.value.trim();
@@ -567,34 +752,59 @@ els.submitBtn.addEventListener("click", async () => {
     setStatus("Nothing to capture.", "err");
     return;
   }
-  const { token } = getSettings();
-  if (!token) {
-    setStatus("Set up your GitHub token first.", "err");
-    openSettings();
-    return;
-  }
   if (state.type === "task" && els.recurUnitInput.value && !els.dueDateInput.value) {
     setStatus("Recurring tasks need a due date to recur from.", "err");
     return;
   }
+  if (state.type === "note" && state.editingNoteBlock) {
+    await submitNoteEdit(text);
+    return;
+  }
 
+  const entry = buildOutboxEntry(text);
+  let id;
+  try {
+    id = await outboxAdd(entry);
+  } catch (err) {
+    // No IndexedDB (e.g. some private modes) — fall back to a direct send
+    // so capture still works, just without the safety net.
+    console.error(err);
+  }
+
+  if (id !== undefined) {
+    // The text is safe on the device now, so clear the box right away —
+    // ready for the next thought whether or not the send goes through.
+    els.entryText.value = "";
+    if (state.type === "task") resetTaskFields();
+    if (!getSettings().token) {
+      await updatePendingBadge();
+      setQueuedStatus();
+      openSettings();
+      return;
+    }
+    setStatus("Sending…", "pending");
+    const sent = await flushOutbox();
+    if (sent.has(id)) {
+      setStatus("Captured.", "ok");
+      if (entry.type === "note") await loadRecentNotes();
+    } else {
+      setQueuedStatus();
+    }
+    return;
+  }
+
+  if (!getSettings().token) {
+    setStatus("Set up your GitHub token first.", "err");
+    openSettings();
+    return;
+  }
   els.submitBtn.disabled = true;
   setStatus("Sending…", "pending");
   try {
-    if (state.type === "journal") {
-      await captureJournal(text);
-    } else if (state.type === "task") {
-      await captureEncounter(state.type, state.category, text, buildTaskSuffix());
-      resetTaskFields();
-    } else if (state.type === "note" && state.editingNoteBlock) {
-      await updateNote(state.editingNoteBlock, text);
-      setEditingNote(null);
-      await loadRecentNotes();
-    } else {
-      await captureEncounter(state.type, state.category, text);
-      if (state.type === "note") await loadRecentNotes();
-    }
+    await sendEntry(entry);
     els.entryText.value = "";
+    if (state.type === "task") resetTaskFields();
+    if (entry.type === "note") await loadRecentNotes();
     setStatus("Captured.", "ok");
   } catch (err) {
     console.error(err);
