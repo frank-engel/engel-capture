@@ -15,6 +15,8 @@ Pick a type, type a sentence, hit Capture:
 
 A 🙏 button next to the settings gear opens a read-only view of `Spaces/Prayer/Prayer List.md`, grouped by whatever `##` categories are currently in the file. That button only renders once a token is saved — with no token configured there's no visible sign the feature exists, so someone picking up the phone without the PAT set up doesn't stumble onto the prayer list.
 
+**Offline outbox.** Every capture is saved to the browser's IndexedDB before it's sent, and the text box clears as soon as it's saved. If the send fails (no signal, GitHub down, bad token), the capture just waits there and a small ↻ badge in the header shows how many are pending. The app retries on open, on reconnect, when you switch back to it, after saving settings, once a minute while anything is waiting, and when you tap the badge. Queued captures go out oldest first and keep the date and time they were written, so a journal entry made offline at 10pm still lands in that day's note. Editing an existing Note isn't queued; it needs the network.
+
 ## One-time setup
 
 1. **Create a fine-grained GitHub token**: [github.com/settings/personal-access-tokens](https://github.com/settings/personal-access-tokens) → *Generate new token* → Repository access: **Only select repositories** → `Engel-Personal` → Permissions → **Contents: Read and write**. Nothing else. Copy the token.
@@ -29,4 +31,5 @@ Served as-is via GitHub Pages from this repo (`main` branch, root). No build ste
 
 - Two destinations only (today's journal note, or the Encounters inbox) — deliberately avoids any "find this heading and splice content in" logic beyond a single fixed heading per file, to keep the client-side logic small and reliable.
 - No GitHub Actions, no server — the page calls the Contents API directly (GET for the current file + sha, PUT to update), which is simpler and faster than a repository-dispatch pipeline for something this small.
+- The outbox only removes an entry after GitHub confirms the write. The rare case where the write succeeds but the response is lost gives a duplicate line on retry, never a lost one.
 - The PAT is scoped to exactly one repo's contents, nothing else, so a compromised/lost phone has a small, easily-revocable blast radius.
