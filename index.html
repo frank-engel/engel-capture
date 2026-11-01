@@ -82,6 +82,10 @@
   }
   .prayer-summary.expanded { -webkit-line-clamp: unset; display: block; }
   .prayer-closed { font-size: 0.85rem; color: var(--ok); }
+  .prayer-card.touched { border-color: var(--ok); border-left-width: 4px; }
+  .prayer-today { font-size: 0.78rem; color: var(--ok); font-weight: 600; white-space: nowrap; }
+  #prayerView button.done-btn { background: transparent; color: var(--ok); border-color: var(--ok); }
+  .prayer-progress { font-size: 0.85rem; color: var(--ok); text-align: center; }
   .prayer-updates { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 3px; }
   .prayer-updates li { font-size: 0.85rem; line-height: 1.35; }
   .update-date { color: var(--muted); font-size: 0.78rem; }
@@ -234,8 +238,6 @@
   <div class="chip-row" id="typeRow">
     <div class="chip active" data-type="journal">Journal</div>
     <div class="chip" data-type="prayer">Prayer</div>
-    <div class="chip" data-type="idea">Idea</div>
-    <div class="chip" data-type="task">Task</div>
     <div class="chip" data-type="note">Note</div>
   </div>
 
