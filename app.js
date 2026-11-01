@@ -42,9 +42,6 @@ const els = {
   prayerView: document.getElementById("prayerView"),
   prayerNavBtn: document.getElementById("prayerNavBtn"),
   prayerBackBtn: document.getElementById("prayerBackBtn"),
-  prayerRefreshBtn: document.getElementById("prayerRefreshBtn"),
-  prayerStatus: document.getElementById("prayerStatus"),
-  prayerContent: document.getElementById("prayerContent"),
   pendingBtn: document.getElementById("pendingBtn"),
   pendingCount: document.getElementById("pendingCount"),
   checkinRow: document.getElementById("checkinRow"),
@@ -152,91 +149,16 @@ function setStatus(msg, kind) {
 }
 
 // ---------- prayer list view ----------
+//
+// The view itself lives in prayer.js. This just switches screens.
 
 function showView(view) {
   els.captureView.classList.toggle("view-hidden", view !== "capture");
   els.prayerView.classList.toggle("view-hidden", view !== "prayer");
 }
 
-function setPrayerStatus(msg, kind) {
-  els.prayerStatus.textContent = msg;
-  els.prayerStatus.className = kind || "";
-}
-
-// Groups lines under each "## Heading" into { title, items }. Reads
-// whatever headings are actually in the file rather than a hardcoded
-// category list, so renaming/adding a category on the Prayer List needs
-// no matching change here.
-function parsePrayerList(md) {
-  const sections = [];
-  let current = null;
-  for (const line of md.split("\n")) {
-    const heading = /^##\s+(.*)/.exec(line);
-    if (heading) {
-      current = { title: heading[1].trim(), items: [] };
-      sections.push(current);
-      continue;
-    }
-    if (!current) continue;
-    const item = /^-\s+(.*)/.exec(line);
-    if (item) current.items.push(item[1].trim());
-  }
-  return sections;
-}
-
-function renderPrayerList(sections) {
-  els.prayerContent.innerHTML = "";
-  if (!sections.length) {
-    const p = document.createElement("p");
-    p.className = "muted";
-    p.textContent = "No categories found.";
-    els.prayerContent.appendChild(p);
-    return;
-  }
-  for (const section of sections) {
-    const h2 = document.createElement("h2");
-    h2.textContent = section.title;
-    els.prayerContent.appendChild(h2);
-    if (!section.items.length) {
-      const p = document.createElement("p");
-      p.className = "muted";
-      p.textContent = "Nothing here.";
-      els.prayerContent.appendChild(p);
-      continue;
-    }
-    const ul = document.createElement("ul");
-    for (const item of section.items) {
-      const li = document.createElement("li");
-      li.textContent = item; // textContent, not innerHTML — entries are untrusted text
-      ul.appendChild(li);
-    }
-    els.prayerContent.appendChild(ul);
-  }
-}
-
-async function loadPrayerList() {
-  setPrayerStatus("Loading…", "pending");
-  els.prayerContent.innerHTML = "";
-  try {
-    const file = await getFile(PRAYER_LIST_PATH);
-    if (!file) {
-      setPrayerStatus("Prayer List.md not found.", "err");
-      return;
-    }
-    renderPrayerList(parsePrayerList(file.content));
-    setPrayerStatus("", "");
-  } catch (err) {
-    console.error(err);
-    setPrayerStatus("Failed to load — check your token/settings.", "err");
-  }
-}
-
-els.prayerNavBtn.addEventListener("click", () => {
-  showView("prayer");
-  loadPrayerList();
-});
+els.prayerNavBtn.addEventListener("click", openPrayerView);
 els.prayerBackBtn.addEventListener("click", () => showView("capture"));
-els.prayerRefreshBtn.addEventListener("click", loadPrayerList);
 
 // ---------- time ----------
 
@@ -326,6 +248,7 @@ async function putFile(path, content, sha, message) {
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`GitHub PUT ${path} failed: ${res.status} ${await res.text()}`);
+  return res.json();
 }
 
 // ---------- content shaping ----------
@@ -617,12 +540,14 @@ async function updateNote(oldBlock, newText) {
 //                imported; nothing new is ever written to it.
 //   v2  entries  one row per capture, keyed by a short id ('j-7k3qxm' for
 //                journal, 'n-…' for everything that goes to the Inbox).
+//   v3  persons, prayer_requests, prayer_updates, meta — the Prayer List
+//                (see prayer.js). 'w-…' people, 'p-…' requests, 'u-…' updates.
 //
 // The ids aren't written into the vault yet, so vault lines stay exactly
 // as they were. They're there for the later phases' read-back.
 
 const DB_NAME = "engel-capture";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const OUTBOX_STORE = "outbox";
 const ENTRIES_STORE = "entries";
 const ID_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
@@ -646,6 +571,20 @@ function openDb() {
           const entries = db.createObjectStore(ENTRIES_STORE, { keyPath: "id" });
           entries.createIndex("sync_state", "sync_state");
           entries.createIndex("local_date", "local_date");
+        }
+        if (!db.objectStoreNames.contains(PERSONS_STORE)) {
+          db.createObjectStore(PERSONS_STORE, { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains(REQUESTS_STORE)) {
+          const reqs = db.createObjectStore(REQUESTS_STORE, { keyPath: "id" });
+          reqs.createIndex("status", "status");
+        }
+        if (!db.objectStoreNames.contains(UPDATES_STORE)) {
+          const ups = db.createObjectStore(UPDATES_STORE, { keyPath: "id" });
+          ups.createIndex("request_id", "request_id");
+        }
+        if (!db.objectStoreNames.contains(META_STORE)) {
+          db.createObjectStore(META_STORE, { keyPath: "key" });
         }
       };
       req.onsuccess = () => {
@@ -892,11 +831,19 @@ async function settlePendingCommit(headSha) {
       if (err.status !== 404) throw err; // unknown commit: it never landed
     }
   }
-  if (landed) await markSynced(p.ids, p.sha);
+  if (landed) {
+    await markSynced(p.ids, p.sha);
+    if (p.prayer) await markPrayerSynced(p.prayer.rev, p.prayer.blobSha);
+  }
   localStorage.removeItem(PENDING_COMMIT_KEY);
 }
 
-function batchCommitMessage(entries) {
+function batchCommitMessage(entries, withPrayer) {
+  if (!entries.length) {
+    const { date, time } = nowParts();
+    return `Prayer List: ${date} ${time}`;
+  }
+  if (withPrayer) return [batchCommitMessage(entries, false), "", "- Prayer List updated"].join("\n");
   if (entries.length === 1) return entryCommitMessage(entries[0]);
   const first = entries[0], last = entries[entries.length - 1];
   return [
@@ -906,7 +853,9 @@ function batchCommitMessage(entries) {
   ].join("\n");
 }
 
-async function syncAsOneCommit(entries) {
+// `withPrayer` adds a regenerated Prayer List.md to the same commit when the
+// app's prayer data changed since the last sync (prayer.js planPrayerWrite).
+async function syncAsOneCommit(entries, withPrayer) {
   const branch = await defaultBranch();
   for (let attempt = 0; attempt < 4; attempt++) {
     const ref = await gh("GET", `/git/ref/heads/${encodeURIComponent(branch)}`);
@@ -915,10 +864,12 @@ async function syncAsOneCommit(entries) {
     await settlePendingCommit(headSha);
     const still = new Set((await pendingEntries()).map((e) => e.id));
     entries = entries.filter((e) => still.has(e.id));
-    if (!entries.length) return entries;
+    const prayer = withPrayer ? await planPrayerWrite(headSha) : null;
+    if (!entries.length && !prayer) return entries;
 
     const head = await gh("GET", `/git/commits/${headSha}`);
     const files = new Map();
+    if (prayer) files.set(PRAYER_LIST_PATH, prayer.content);
     for (const entry of entries) {
       const path = entryPath(entry);
       if (!files.has(path)) {
@@ -933,14 +884,18 @@ async function syncAsOneCommit(entries) {
       tree: [...files].map(([path, content]) => ({ path, mode: "100644", type: "blob", content })),
     });
     const commit = await gh("POST", "/git/commits", {
-      message: batchCommitMessage(entries),
+      message: batchCommitMessage(entries, !!prayer),
       tree: tree.sha,
       parents: [headSha],
     });
 
     const { owner, repo } = getSettings();
     const ids = entries.map((e) => e.id);
-    localStorage.setItem(PENDING_COMMIT_KEY, JSON.stringify({ owner, repo, sha: commit.sha, ids }));
+    const prayerDone = prayer && {
+      rev: prayer.rev,
+      blobSha: (tree.tree.find((t) => t.path === PRAYER_LIST_PATH) || {}).sha || null,
+    };
+    localStorage.setItem(PENDING_COMMIT_KEY, JSON.stringify({ owner, repo, sha: commit.sha, ids, prayer: prayerDone }));
     try {
       await gh("PATCH", `/git/refs/heads/${encodeURIComponent(branch)}`, { sha: commit.sha, force: false });
     } catch (err) {
@@ -953,6 +908,7 @@ async function syncAsOneCommit(entries) {
       throw err;
     }
     await markSynced(ids, commit.sha);
+    if (prayerDone) await markPrayerSynced(prayerDone.rev, prayerDone.blobSha);
     localStorage.removeItem(PENDING_COMMIT_KEY);
     return entries;
   }
@@ -962,6 +918,7 @@ async function syncAsOneCommit(entries) {
 async function updatePendingBadge() {
   let n = 0;
   try { n = await pendingCount(); } catch { /* no IndexedDB: nothing can be pending */ }
+  if (await prayerNeedsSync()) n += 1; // the Prayer List counts as one waiting change
   els.pendingBtn.hidden = n === 0;
   els.pendingCount.textContent = String(n);
   els.pendingBtn.title = n === 1 ? "1 capture waiting to send — tap to retry" : `${n} captures waiting to send — tap to retry`;
@@ -991,7 +948,8 @@ async function runSync() {
   try {
     const run = async () => {
       const entries = await pendingEntries();
-      if (!entries.length) return;
+      const withPrayer = await prayerNeedsSync();
+      if (!entries.length && !withPrayer) return;
       // One-by-one marks each entry as it goes, so a failure part-way
       // still reports the ones that made it.
       const done = [];
@@ -1002,8 +960,9 @@ async function runSync() {
             await markSynced([e.id], null);
             done.push(e);
           }
+          if (withPrayer) await sendPrayerDirect();
         } else {
-          done.push(...(await syncAsOneCommit(entries)));
+          done.push(...(await syncAsOneCommit(entries, withPrayer)));
         }
         lastSendError = null;
       } catch (err) {
@@ -1132,6 +1091,17 @@ els.submitBtn.addEventListener("click", async () => {
   }
   if (state.type === "note" && state.editingNoteBlock) {
     await submitNoteEdit(text);
+    return;
+  }
+  if (state.type === "prayer" && (await prayerListImported())) {
+    try {
+      await capturePrayerRequest(text, state.category);
+      els.entryText.value = "";
+      setStatus("Added to the Prayer List.", "ok");
+    } catch (err) {
+      console.error(err);
+      setStatus("Couldn't save that prayer — try again.", "err");
+    }
     return;
   }
 

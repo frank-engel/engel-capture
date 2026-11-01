@@ -45,16 +45,69 @@
   main { flex: 1; display: flex; flex-direction: column; gap: 14px; padding-bottom: 24px; }
   .view-hidden { display: none; }
 
-  .prayer-toolbar { display: flex; justify-content: space-between; gap: 8px; }
-  .prayer-toolbar button {
+  .prayer-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  #prayerView button {
     background: var(--panel); color: var(--text); border: 1px solid var(--border);
     border-radius: 8px; padding: 8px 12px; font-size: 0.9rem; cursor: pointer;
   }
-  #prayerContent h2 { font-size: 0.95rem; margin: 18px 0 6px; color: var(--accent); }
-  #prayerContent h2:first-child { margin-top: 4px; }
-  #prayerContent ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
-  #prayerContent li { font-size: 0.92rem; line-height: 1.4; }
+  #prayerView button.primary-btn { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  #prayerView button[hidden], #prayerView input[hidden] { display: none; }
+  .prayer-sync { font-size: 0.8rem; color: var(--muted); }
+  #prayerSearch {
+    width: 100%; padding: 9px 10px; border-radius: 8px; font-size: 0.92rem;
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  }
+  #prayerStatus { font-size: 0.88rem; text-align: center; min-height: 1.2em; }
+  #prayerStatus.ok { color: var(--ok); } #prayerStatus.err { color: var(--err); } #prayerStatus.pending { color: var(--muted); }
+  .prayer-banner { border: 1px solid var(--err); border-radius: 10px; padding: 10px 12px; font-size: 0.88rem; }
+  .prayer-banner p { margin: 0 0 8px; line-height: 1.4; }
+  .banner-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  #prayerContent { display: flex; flex-direction: column; gap: 8px; }
+  #prayerContent h2 { font-size: 0.95rem; margin: 14px 0 0; color: var(--accent); }
+  #prayerContent h2:first-child { margin-top: 0; }
   #prayerContent p.muted { color: var(--muted); font-size: 0.85rem; margin: 0; }
+  .prayer-import { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .prayer-import h2 { margin-top: 0 !important; }
+  .prayer-import p { font-size: 0.88rem; line-height: 1.45; color: var(--muted); }
+  .prayer-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px; display: flex; flex-direction: column; gap: 6px;
+  }
+  .prayer-card-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .prayer-name { font-weight: 600; font-size: 0.95rem; }
+  .prayer-last { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
+  .prayer-summary {
+    font-size: 0.9rem; line-height: 1.4; cursor: pointer;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .prayer-summary.expanded { -webkit-line-clamp: unset; display: block; }
+  .prayer-closed { font-size: 0.85rem; color: var(--ok); }
+  .prayer-updates { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 3px; }
+  .prayer-updates li { font-size: 0.85rem; line-height: 1.35; }
+  .update-date { color: var(--muted); font-size: 0.78rem; }
+  .prayer-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  #prayerView .prayer-actions button { padding: 6px 12px; font-size: 0.85rem; }
+  .prayer-composer { display: flex; flex-direction: column; gap: 8px; }
+  .prayer-composer textarea { min-height: 80px; font-size: 0.95rem; }
+  .composer-row { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+  .composer-row input[type="date"] {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 8px; font-family: inherit;
+  }
+  .composer-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .prayer-answered summary { cursor: pointer; color: var(--accent); font-size: 0.95rem; font-weight: 700; margin: 14px 0 8px; }
+  .prayer-answered .prayer-card { margin-bottom: 8px; opacity: 0.85; }
+  dialog textarea { min-height: 90px; margin-top: 4px; background: var(--bg); }
+  dialog select {
+    width: 100%; margin-top: 4px; padding: 10px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.95rem;
+  }
+  .update-list { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; max-height: 180px; overflow-y: auto; }
+  .update-row { display: flex; justify-content: space-between; gap: 8px; font-size: 0.85rem; align-items: baseline; }
+  .link-btn { background: none !important; border: none !important; color: var(--err) !important; padding: 0 !important; font-size: 0.8rem; cursor: pointer; }
+  .dialog-actions.left { justify-content: flex-start; flex-wrap: wrap; margin-top: 12px; }
+  .dialog-actions button.danger { color: var(--err); }
+  .dialog-actions button[hidden], dialog div[hidden] { display: none; }
 
   .chip-row { display: flex; gap: 8px; flex-wrap: wrap; }
   .chip {
@@ -68,7 +121,7 @@
 
   #categoryRow { display: none; }
   #categoryRow.show { display: flex; }
-  #categoryRow .chip { flex-basis: 30%; font-size: 0.82rem; padding: 8px 6px; }
+  #categoryRow .chip { flex-basis: 20%; font-size: 0.82rem; padding: 8px 6px; }
 
   #taskFields { display: none; flex-direction: column; gap: 10px; }
   #taskFields.show { display: flex; }
@@ -189,10 +242,8 @@
   <div class="chip-row" id="categoryRow">
     <div class="chip active" data-category="people">People</div>
     <div class="chip" data-category="church">Church</div>
-    <div class="chip" data-category="life">Life</div>
+    <div class="chip" data-category="self">Self</div>
     <div class="chip" data-category="praise">Praise</div>
-    <div class="chip" data-category="pain">Pain</div>
-    <div class="chip" data-category="theology">Theology</div>
   </div>
 
   <div id="taskFields">
@@ -243,11 +294,65 @@
 <main id="prayerView" class="view-hidden">
   <div class="prayer-toolbar">
     <button id="prayerBackBtn">&larr; Back</button>
-    <button id="prayerRefreshBtn">Refresh</button>
+    <span id="prayerSyncState" class="prayer-sync"></span>
+    <button id="prayerNewBtn" class="primary-btn" hidden>+ New prayer</button>
   </div>
+  <div id="prayerBanner" class="prayer-banner" hidden></div>
+  <input id="prayerSearch" type="search" placeholder="Find a name or word" autocomplete="off" hidden>
   <div id="prayerStatus"></div>
   <div id="prayerContent"></div>
 </main>
+
+<datalist id="prayerPersonList"></datalist>
+
+<dialog id="prayerRequestDialog">
+  <h2 id="prayerReqTitle">New prayer</h2>
+  <label for="prayerReqPerson">Who (optional)</label>
+  <input id="prayerReqPerson" type="text" list="prayerPersonList" autocomplete="off" placeholder="Jordan, Minerva &amp; Bill…">
+  <label for="prayerReqRelation">Relation (optional)</label>
+  <input id="prayerReqRelation" type="text" autocomplete="off" placeholder="Scott's wife">
+  <label for="prayerReqVia">Shared by (optional)</label>
+  <input id="prayerReqVia" type="text" autocomplete="off" placeholder="Nancy">
+  <label for="prayerReqCategory">Category</label>
+  <select id="prayerReqCategory">
+    <option value="people">People</option>
+    <option value="church">Church</option>
+    <option value="self">Self</option>
+    <option value="praise">Praise</option>
+  </select>
+  <label for="prayerReqSummary">Prayer</label>
+  <textarea id="prayerReqSummary" rows="4" placeholder="What are we praying for?"></textarea>
+  <div id="prayerReqDateField">
+    <label for="prayerReqDate">Date</label>
+    <input id="prayerReqDate" type="date">
+  </div>
+  <div id="prayerReqEditExtras" hidden>
+    <label>Updates</label>
+    <div id="prayerReqUpdates" class="update-list"></div>
+    <div class="dialog-actions left">
+      <button id="prayerReqAnswer">Mark answered</button>
+      <button id="prayerReqArchive">Archive</button>
+      <button id="prayerReqReopen">Reopen</button>
+      <button id="prayerReqDelete" class="danger">Delete</button>
+    </div>
+  </div>
+  <div class="dialog-actions">
+    <button id="prayerReqCancel">Cancel</button>
+    <button id="prayerReqSave" class="primary">Save</button>
+  </div>
+</dialog>
+
+<dialog id="prayerCloseDialog">
+  <h2 id="prayerCloseTitle">Mark answered</h2>
+  <label for="prayerCloseNote">Note</label>
+  <input id="prayerCloseNote" type="text" autocomplete="off">
+  <label for="prayerCloseDate">Date</label>
+  <input id="prayerCloseDate" type="date">
+  <div class="dialog-actions">
+    <button id="prayerCloseCancel">Cancel</button>
+    <button id="prayerCloseSave" class="primary">Save</button>
+  </div>
+</dialog>
 
 <dialog id="settingsDialog">
   <h2>Settings</h2>
@@ -266,6 +371,7 @@
   </div>
 </dialog>
 
+<script src="prayer.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
