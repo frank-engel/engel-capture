@@ -101,9 +101,22 @@ updateNavVisibility();
 
 // ---------- UI ----------
 
-els.typeRow.addEventListener("click", (e) => {
+els.typeRow.addEventListener("click", async (e) => {
   const chip = e.target.closest(".chip");
   if (!chip) return;
+  // Once the Prayer List lives in the app, the Prayer chip is a shortcut to
+  // it. Anything already typed opens as a new prayer, "Name: text" split out.
+  if (chip.dataset.type === "prayer" && getSettings().token && (await prayerListImported())) {
+    const typed = els.entryText.value.trim();
+    await openPrayerView();
+    if (typed) {
+      const { name, via, summary } = splitPersonPrefix(flat(typed));
+      openRequestDialog(null, { personName: name || "", summary });
+      if (via) pels.reqVia.value = via;
+      els.entryText.value = "";
+    }
+    return;
+  }
   state.type = chip.dataset.type;
   setEditingNote(null);
   [...els.typeRow.children].forEach((c) => c.classList.toggle("active", c === chip));

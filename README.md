@@ -18,7 +18,9 @@ Pick a type, type a sentence, hit Capture:
 
 - **Log update** adds a dated note (or, left blank, just marks that you prayed for it that day), with a 🙌 Praise toggle. In the file the date joins the line's date chain and a note sits under it as an indented sub-bullet.
 - **Edit** rewords it, changes the person, relation, who shared it, or category, removes a mistaken update, marks it answered or archived (with an optional note), reopens it, or deletes it.
-- **+ New prayer** adds one. On the capture screen, the Prayer chip does the same once the list is imported: `Jordan: surgery Tuesday` files under Jordan.
+- **+ New prayer** adds one. Once the list is imported, the capture screen's Prayer chip just opens this view; if something is already typed it opens as a new prayer, so `Jordan: surgery Tuesday` files under Jordan.
+
+A prayer you've logged an update on, added, or edited today gets a green edge, a **✓ Today** mark and a quieter **✓ Logged** button, and the top of the list counts how many you've prayed through today, so a pass down the list shows what's left.
 
 Each line in the file ends with a short Obsidian block id (`^p-4m2vda`, `^u-…` on updates) so the app can match it again. If the file is edited outside the app (Obsidian, a Claude skill), the next sync notices, stops writing it, and the Prayer view asks whether to keep the app's list or re-import the vault's version, so nothing is silently overwritten. Changes made in a quick burst go out together a few seconds after the last one. The 🙏 button only renders once a token is saved, so someone picking up the phone without the PAT set up doesn't stumble onto the prayer list.
 

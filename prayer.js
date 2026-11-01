@@ -683,14 +683,26 @@ function renderComposer(req) {
   return box;
 }
 
+// "Touched today": an update dated today, or the prayer was added or edited
+// today. The import itself doesn't count (it stamps every row at once).
+function touchedToday(req, ups) {
+  const today = todayLocal();
+  if (ups.some((u) => u.on_date === today)) return true;
+  const importedAt = (prayerData.meta && prayerData.meta.imported_at) || 0;
+  return req.updated_at > importedAt && nowParts(new Date(req.updated_at)).date === today;
+}
+
 function renderCard(req, person, ups) {
-  const card = el("div", "prayer-card");
+  const touched = req.status === "active" && touchedToday(req, ups);
+  const card = el("div", "prayer-card" + (touched ? " touched" : ""));
   const head = el("div", "prayer-card-head");
   const dates = requestDates(req, ups);
   const last = dates[dates.length - 1];
   const title = person ? person.name + (person.relation ? `, ${person.relation}` : "") : "";
   head.appendChild(el("span", "prayer-name", title + (req.via ? ` (via ${req.via})` : "")));
-  head.appendChild(el("span", "prayer-last", shortDate(last) + (dates.length > 1 ? ` · ${dates.length}×` : "")));
+  head.appendChild(touched
+    ? el("span", "prayer-today", "✓ Today")
+    : el("span", "prayer-last", shortDate(last) + (dates.length > 1 ? ` · ${dates.length}×` : "")));
   card.appendChild(head);
 
   const summary = el("div", "prayer-summary" + (prayerUi.expanded.has(req.id) ? " expanded" : ""), req.summary);
@@ -722,7 +734,8 @@ function renderCard(req, person, ups) {
   } else {
     const actions = el("div", "prayer-actions");
     if (req.status === "active") {
-      const log = el("button", "primary-btn", "Log update");
+      // Once touched today the button goes quiet, but still works for a second update.
+      const log = el("button", touched ? "done-btn" : "primary-btn", touched ? "✓ Logged · add more" : "Log update");
       log.addEventListener("click", () => { prayerUi.composingFor = req.id; renderPrayerView(); });
       actions.appendChild(log);
     }
@@ -749,10 +762,17 @@ function renderPrayerView() {
   const live = prayerData.requests.filter((r) => !r.deleted_at)
     .filter((r) => matchesSearch(r, personById.get(r.person_id), ups.get(r.id) || [], q));
 
+  const activeAll = prayerData.requests.filter((r) => !r.deleted_at && r.status === "active");
+  const doneToday = activeAll.filter((r) => touchedToday(r, ups.get(r.id) || [])).length;
+  if (doneToday) {
+    pels.content.appendChild(el("div", "prayer-progress", `Prayed through ${doneToday} of ${activeAll.length} today`));
+  }
+
   for (const cat of PRAYER_CATEGORIES) {
     const reqs = live.filter((r) => r.status === "active" && r.category === cat.slug).sort(bySortKey);
     if (q && !reqs.length) continue;
-    pels.content.appendChild(el("h2", null, `${cat.title}${reqs.length ? ` (${reqs.length})` : ""}`));
+    const catDone = reqs.filter((r) => touchedToday(r, ups.get(r.id) || [])).length;
+    pels.content.appendChild(el("h2", null, `${cat.title}${reqs.length ? ` (${catDone ? `${catDone}/` : ""}${reqs.length})` : ""}`));
     if (!reqs.length) { pels.content.appendChild(el("p", "muted", "Nothing here.")); continue; }
     for (const r of reqs) pels.content.appendChild(renderCard(r, personById.get(r.person_id), ups.get(r.id) || []));
   }
