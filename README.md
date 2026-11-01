@@ -9,11 +9,18 @@ This repo is deliberately public and contains no personal content — just app c
 Pick a type, type a sentence, hit Capture:
 
 - **Journal** → appends a timestamped line into today's `Calendar/YYYY-MM-DD.md` in the vault (creating the file from a minimal template if today's note doesn't exist yet)
-- **Prayer** (with a People/Church/Life/Praise/Pain/Theology category), **Idea**, **Task**, **Note** → appends one tagged line to the top of `+ Encounters/Inbox.md` in the vault, for later triage with the vault's `process-captures` Claude Code skill
+- **Prayer** (with a People/Church/Self/Praise category) → straight onto the app's Prayer List once it's been imported (see below); before that, an Inbox line like the others
+- **Idea**, **Task**, **Note** → appends one tagged line to the top of `+ Encounters/Inbox.md` in the vault, for later triage with the vault's `process-captures` Claude Code skill
 
 **Task** also gets an optional due date and repeat interval, written in the [Tasks plugin's](https://publish.obsidian.md/tasks/) own emoji syntax (🔁 recurrence, 📅 due date) so the checkbox is immediately live in any Tasks query — no triage needed for it to work. Recurrence needs a due date to recur from, so the app requires one whenever a repeat interval is set.
 
-A 🙏 button next to the settings gear opens a read-only view of `Spaces/Prayer/Prayer List.md`, grouped by whatever `##` categories are currently in the file. That button only renders once a token is saved — with no token configured there's no visible sign the feature exists, so someone picking up the phone without the PAT set up doesn't stumble onto the prayer list.
+**Prayer List.** A 🙏 button next to the settings gear opens the Prayer List, which the app now keeps itself (Phase 2). The first time, **Import Prayer List** reads `Spaces/Prayer/Prayer List.md` into the phone's database as people, requests and dated updates; from then on the app owns that file and rewrites it whole when it syncs, in the same commit as any waiting captures. The view shows active prayers by category (People, Church, Self, Praise; the old Life, Pain and Theology fold into Self) with the answered ones folded away at the bottom, plus a search box. On each prayer:
+
+- **Log update** adds a dated note (or, left blank, just marks that you prayed for it that day), with a 🙌 Praise toggle. In the file the date joins the line's date chain and a note sits under it as an indented sub-bullet.
+- **Edit** rewords it, changes the person, relation, who shared it, or category, removes a mistaken update, marks it answered or archived (with an optional note), reopens it, or deletes it.
+- **+ New prayer** adds one. On the capture screen, the Prayer chip does the same once the list is imported: `Jordan: surgery Tuesday` files under Jordan.
+
+Each line in the file ends with a short Obsidian block id (`^p-4m2vda`, `^u-…` on updates) so the app can match it again. If the file is edited outside the app (Obsidian, a Claude skill), the next sync notices, stops writing it, and the Prayer view asks whether to keep the app's list or re-import the vault's version, so nothing is silently overwritten. Changes made in a quick burst go out together a few seconds after the last one. The 🙏 button only renders once a token is saved, so someone picking up the phone without the PAT set up doesn't stumble onto the prayer list.
 
 **Check-ins.** Under the Capture button on the Journal tab, **Check in:** Daily Office · Lectio · Workout logs that practice in one tap as an ordinary journal line with a trailing tag, e.g. `_07:12_ — Did the Daily Office. #practice/daily-office`, so the weekly review can count them. Anything already typed in the box becomes the line's text instead of the default sentence. The send waits five seconds, and the status line offers **Undo** for a mis-tap.
 

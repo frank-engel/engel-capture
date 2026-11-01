@@ -2,8 +2,8 @@
 // a flaky connection. Never touches the GitHub API calls (different origin,
 // and we skip caching anything but the static shell below).
 
-const CACHE = "engel-capture-v4";
-const SHELL = ["./", "./index.html", "./app.js", "./manifest.json", "./icon.svg"];
+const CACHE = "engel-capture-v5";
+const SHELL = ["./", "./index.html", "./app.js", "./prayer.js", "./manifest.json", "./icon.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
