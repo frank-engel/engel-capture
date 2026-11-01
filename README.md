@@ -10,9 +10,9 @@ Pick a type, type a sentence, hit Capture:
 
 - **Journal** → appends a timestamped line into today's `Calendar/YYYY-MM-DD.md` in the vault (creating the file from a minimal template if today's note doesn't exist yet)
 - **Prayer** (with a People/Church/Self/Praise category) → straight onto the app's Prayer List once it's been imported (see below); before that, an Inbox line like the others
-- **Idea**, **Task**, **Note** → appends one tagged line to the top of `+ Encounters/Inbox.md` in the vault, for later triage with the vault's `process-captures` Claude Code skill
+- **Note** → appends one tagged line to the top of `+ Encounters/Inbox.md` in the vault, for later triage with the vault's `process-captures` Claude Code skill
 
-**Task** also gets an optional due date and repeat interval, written in the [Tasks plugin's](https://publish.obsidian.md/tasks/) own emoji syntax (🔁 recurrence, 📅 due date) so the checkbox is immediately live in any Tasks query — no triage needed for it to work. Recurrence needs a due date to recur from, so the app requires one whenever a repeat interval is set.
+The Idea and Task chips were removed in Phase 2 (2026-11-01): ideas are a `#idea` typed in a journal line, and tasks will come out of journal entries in Phase 4. Inbox lines they wrote before are untouched, and the task-field code is still in `app.js`, unused.
 
 **Prayer List.** A 🙏 button next to the settings gear opens the Prayer List, which the app now keeps itself (Phase 2). The first time, **Import Prayer List** reads `Spaces/Prayer/Prayer List.md` into the phone's database as people, requests and dated updates; from then on the app owns that file and rewrites it whole when it syncs, in the same commit as any waiting captures. The view shows active prayers by category (People, Church, Self, Praise; the old Life, Pain and Theology fold into Self) with the answered ones folded away at the bottom, plus a search box. On each prayer:
 
