@@ -1180,6 +1180,29 @@ function setStatusWithUndo(msg, onUndo) {
   setTimeout(() => link.remove(), CHECKIN_UNDO_MS);
 }
 
+// Done-today marks: a practice chip turns green with a ✓ once a check-in for
+// it is saved on this phone today (the phone's date, like the daily note).
+// Entries stay on the phone after they sync, so the local database is enough.
+async function refreshCheckinMarks() {
+  let done = new Set();
+  try {
+    const today = nowParts().date;
+    const rows = await dbTx([ENTRIES_STORE], "readonly", (s, out) => {
+      const req = s[ENTRIES_STORE].index("local_date").getAll(today);
+      req.onsuccess = () => { out.result = req.result; };
+    });
+    for (const row of rows || []) {
+      for (const tag of row.tags || []) if (tag.startsWith("practice/")) done.add(tag.slice(9));
+    }
+  } catch { /* no IndexedDB: no marks */ }
+  for (const chip of els.checkinRow.querySelectorAll(".chip")) {
+    const key = chip.dataset.practice;
+    const isDone = done.has(key);
+    chip.classList.toggle("done", isDone);
+    chip.textContent = (isDone ? "✓ " : "") + CHECKINS[key].label;
+  }
+}
+
 els.checkinRow.addEventListener("click", async (e) => {
   const chip = e.target.closest(".chip");
   if (!chip) return;
@@ -1192,6 +1215,7 @@ els.checkinRow.addEventListener("click", async (e) => {
     onSaved: () => { if (typed) els.entryText.value = ""; },
     delaySync: CHECKIN_UNDO_MS,
   });
+  refreshCheckinMarks();
   if (outcome === "failed") {
     setStatus("Failed — check your token/settings and try again.", "err");
     return;
@@ -1204,6 +1228,7 @@ els.checkinRow.addEventListener("click", async (e) => {
     let removed = false;
     try { removed = await deleteIfPending(entry.id); } catch (err) { console.error(err); }
     await updatePendingBadge();
+    refreshCheckinMarks();
     if (removed) {
       if (typed && !els.entryText.value) els.entryText.value = typed;
       setStatus(`Removed ${practice.label} check-in.`, "pending");
@@ -1211,6 +1236,12 @@ els.checkinRow.addEventListener("click", async (e) => {
       setStatus("Already sent — delete the line in Obsidian if it was a mistake.", "err");
     }
   });
+});
+
+refreshCheckinMarks();
+// Re-check on return to the app, so yesterday's marks clear after midnight.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") refreshCheckinMarks();
 });
 
 // Cmd/Ctrl+Enter submits from the textarea.
