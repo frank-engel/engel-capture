@@ -178,6 +178,40 @@
     font-size: 1.05rem; font-weight: 700; cursor: pointer;
   }
   button#submitBtn:disabled { opacity: 0.5; }
+  .submit-row { display: flex; gap: 8px; }
+  .submit-row #submitBtn { flex: 1; }
+  .task-toggle {
+    background: var(--panel); color: var(--muted);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 0 14px; font-size: 0.95rem; cursor: pointer; white-space: nowrap;
+  }
+  .task-toggle.active { color: var(--accent); border-color: var(--accent); font-weight: 600; }
+  .task-toggle[hidden] { display: none; }
+
+  #todayTasks { display: flex; flex-direction: column; gap: 6px; }
+  #todayTasks[hidden] { display: none; }
+  .today-label { font-size: 0.82rem; color: var(--muted); }
+  #todayList, #laterList { display: flex; flex-direction: column; gap: 6px; }
+  #laterList[hidden] { display: none; }
+  .task-item {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .task-item input[type="checkbox"] { width: 20px; height: 20px; margin: 0; flex: none; accent-color: var(--ok); }
+  .task-text { flex: 1; font-size: 0.92rem; line-height: 1.35; cursor: pointer; overflow-wrap: anywhere; }
+  .task-item.done .task-text { color: var(--muted); text-decoration: line-through; }
+  .task-when { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+  .task-pin {
+    background: transparent; color: var(--accent); border: 1px solid var(--border);
+    border-radius: 999px; padding: 3px 10px; font-size: 0.75rem; cursor: pointer;
+  }
+  .task-empty { margin: 0; font-size: 0.85rem; color: var(--muted); }
+  .later-btn {
+    align-self: flex-start; background: none; border: none; color: var(--muted);
+    font-size: 0.85rem; padding: 4px 0; cursor: pointer;
+  }
+  .later-btn[hidden] { display: none; }
 
   #checkinRow { display: none; align-items: center; }
   #checkinRow.show { display: flex; }
@@ -282,7 +316,10 @@
     <div id="recentNotesList"></div>
   </div>
 
-  <button id="submitBtn">Capture</button>
+  <div class="submit-row">
+    <button id="taskToggle" class="task-toggle" aria-pressed="false" title="Make this capture a task">&#9744; Task</button>
+    <button id="submitBtn">Capture</button>
+  </div>
 
   <div class="chip-row show" id="checkinRow">
     <span class="checkin-label">Check in:</span>
@@ -292,6 +329,13 @@
   </div>
 
   <div id="status"></div>
+
+  <section id="todayTasks" aria-label="Today's tasks">
+    <div class="today-label">Today</div>
+    <div id="todayList"></div>
+    <button id="laterBtn" class="later-btn" hidden></button>
+    <div id="laterList" hidden></div>
+  </section>
 </main>
 
 <main id="prayerView" class="view-hidden">
@@ -375,6 +419,7 @@
 </dialog>
 
 <script src="prayer.js"></script>
+<script src="tasks.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -124,6 +124,9 @@ els.typeRow.addEventListener("click", async (e) => {
   els.taskFields.classList.toggle("show", state.type === "task");
   els.recentNotes.classList.toggle("show", state.type === "note");
   els.checkinRow.classList.toggle("show", state.type === "journal");
+  tels.toggle.hidden = state.type !== "journal";
+  tels.section.hidden = state.type !== "journal";
+  if (state.type !== "journal") setTaskToggle(false);
   if (state.type === "note") loadRecentNotes();
 });
 
@@ -555,12 +558,14 @@ async function updateNote(oldBlock, newText) {
 //                journal, 'n-…' for everything that goes to the Inbox).
 //   v3  persons, prayer_requests, prayer_updates, meta — the Prayer List
 //                (see prayer.js). 'w-…' people, 'p-…' requests, 'u-…' updates.
+//   v4  tasks    the app's copy of task lines, keyed by their ^t-… block id
+//                (see tasks.js).
 //
 // The ids aren't written into the vault yet, so vault lines stay exactly
 // as they were. They're there for the later phases' read-back.
 
 const DB_NAME = "engel-capture";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const OUTBOX_STORE = "outbox";
 const ENTRIES_STORE = "entries";
 const ID_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
@@ -598,6 +603,9 @@ function openDb() {
         }
         if (!db.objectStoreNames.contains(META_STORE)) {
           db.createObjectStore(META_STORE, { keyPath: "key" });
+        }
+        if (!db.objectStoreNames.contains(TASKS_STORE)) {
+          db.createObjectStore(TASKS_STORE, { keyPath: "id" });
         }
       };
       req.onsuccess = () => {
@@ -851,12 +859,21 @@ async function settlePendingCommit(headSha) {
   localStorage.removeItem(PENDING_COMMIT_KEY);
 }
 
-function batchCommitMessage(entries, withPrayer) {
+function batchCommitMessage(entries, withPrayer, taskCount = 0) {
+  const taskLine = taskCount === 1 ? "- 1 task updated" : `- ${taskCount} tasks updated`;
   if (!entries.length) {
     const { date, time } = nowParts();
-    return `Prayer List: ${date} ${time}`;
+    if (withPrayer && taskCount) return [`Prayer List: ${date} ${time}`, "", taskLine].join("\n");
+    return withPrayer ? `Prayer List: ${date} ${time}` : `Tasks: ${date} ${time}`;
   }
-  if (withPrayer) return [batchCommitMessage(entries, false), "", "- Prayer List updated"].join("\n");
+  if (withPrayer || taskCount) {
+    return [
+      batchCommitMessage(entries, false),
+      "",
+      ...(withPrayer ? ["- Prayer List updated"] : []),
+      ...(taskCount ? [taskLine] : []),
+    ].join("\n");
+  }
   if (entries.length === 1) return entryCommitMessage(entries[0]);
   const first = entries[0], last = entries[entries.length - 1];
   return [
@@ -878,9 +895,7 @@ async function syncAsOneCommit(entries, withPrayer) {
     const still = new Set((await pendingEntries()).map((e) => e.id));
     entries = entries.filter((e) => still.has(e.id));
     const prayer = withPrayer ? await planPrayerWrite(headSha) : null;
-    if (!entries.length && !prayer) return entries;
 
-    const head = await gh("GET", `/git/commits/${headSha}`);
     const files = new Map();
     if (prayer) files.set(PRAYER_LIST_PATH, prayer.content);
     for (const entry of entries) {
@@ -891,13 +906,26 @@ async function syncAsOneCommit(entries, withPrayer) {
       }
       files.set(path, applyEntry(files.get(path), entry));
     }
+    // Task changes go on top, so a task in today's note builds on today's
+    // journal lines. Every task write is idempotent (see tasks.js).
+    const tasks = await planTaskWrites(files, async (path) => {
+      const existing = await getFile(path, headSha);
+      return existing ? existing.content : null;
+    });
+    if (!entries.length && !prayer && !tasks.changed) {
+      // Nothing to write: any queued task change is already in the vault.
+      await markTasksSynced(tasks);
+      return entries;
+    }
+
+    const head = await gh("GET", `/git/commits/${headSha}`);
 
     const tree = await gh("POST", "/git/trees", {
       base_tree: head.tree.sha,
       tree: [...files].map(([path, content]) => ({ path, mode: "100644", type: "blob", content })),
     });
     const commit = await gh("POST", "/git/commits", {
-      message: batchCommitMessage(entries, !!prayer),
+      message: batchCommitMessage(entries, !!prayer, tasks.changed ? tasks.count : 0),
       tree: tree.sha,
       parents: [headSha],
     });
@@ -922,6 +950,7 @@ async function syncAsOneCommit(entries, withPrayer) {
     }
     await markSynced(ids, commit.sha);
     if (prayerDone) await markPrayerSynced(prayerDone.rev, prayerDone.blobSha);
+    await markTasksSynced(tasks);
     localStorage.removeItem(PENDING_COMMIT_KEY);
     return entries;
   }
@@ -932,6 +961,7 @@ async function updatePendingBadge() {
   let n = 0;
   try { n = await pendingCount(); } catch { /* no IndexedDB: nothing can be pending */ }
   if (await prayerNeedsSync()) n += 1; // the Prayer List counts as one waiting change
+  n += (await pendingTasks()).length;
   els.pendingBtn.hidden = n === 0;
   els.pendingCount.textContent = String(n);
   els.pendingBtn.title = n === 1 ? "1 capture waiting to send — tap to retry" : `${n} captures waiting to send — tap to retry`;
@@ -962,7 +992,8 @@ async function runSync() {
     const run = async () => {
       const entries = await pendingEntries();
       const withPrayer = await prayerNeedsSync();
-      if (!entries.length && !withPrayer) return;
+      const withTasks = (await pendingTasks()).length > 0;
+      if (!entries.length && !withPrayer && !withTasks) return;
       // One-by-one marks each entry as it goes, so a failure part-way
       // still reports the ones that made it.
       const done = [];
@@ -974,6 +1005,7 @@ async function runSync() {
             done.push(e);
           }
           if (withPrayer) await sendPrayerDirect();
+          if (withTasks) await sendTasksDirect();
         } else {
           done.push(...(await syncAsOneCommit(entries, withPrayer)));
         }
@@ -991,6 +1023,9 @@ async function runSync() {
     console.error(err);
   }
   const remaining = await updatePendingBadge();
+  // Read task lines back (due dates, check-offs made in Obsidian), and show
+  // whatever this sync changed.
+  refreshTasksFromVault(sent.size > 0).catch((err) => console.error(err)).finally(renderTasks);
   // A submit that sent straight through overwrites this with "Captured."
   if (sent.size && remaining === 0) {
     setStatus(sent.size === 1 ? "Queued capture sent." : `${sent.size} queued captures sent.`, "ok");
@@ -1104,6 +1139,25 @@ els.submitBtn.addEventListener("click", async () => {
   }
   if (state.type === "note" && state.editingNoteBlock) {
     await submitNoteEdit(text);
+    return;
+  }
+  if (state.type === "journal" && taskUi.on) {
+    try {
+      await captureTask(text);
+      els.entryText.value = "";
+      setTaskToggle(false);
+      renderTasks();
+      if (!getSettings().token) {
+        setQueuedStatus();
+      } else {
+        setStatus("Task added.", "ok");
+        await syncNow();
+        if (await updatePendingBadge()) setQueuedStatus();
+      }
+    } catch (err) {
+      console.error(err);
+      setStatus("Couldn't save that task — try again.", "err");
+    }
     return;
   }
   if (state.type === "prayer" && (await prayerListImported())) {
@@ -1239,6 +1293,7 @@ els.checkinRow.addEventListener("click", async (e) => {
 });
 
 refreshCheckinMarks();
+initTasks();
 // Re-check on return to the app, so yesterday's marks clear after midnight.
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") refreshCheckinMarks();
