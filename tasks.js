@@ -60,9 +60,11 @@ const tels = {
   list: document.getElementById("todayList"),
   laterBtn: document.getElementById("laterBtn"),
   laterList: document.getElementById("laterList"),
+  doneBtn: document.getElementById("doneBtn"),
+  doneList: document.getElementById("doneList"),
 };
 
-const taskUi = { on: false, laterOpen: false, syncTimer: null, lastRefresh: 0 };
+const taskUi = { on: false, laterOpen: false, doneOpen: false, syncTimer: null, lastRefresh: 0 };
 
 // ---------- ids and dates ----------
 
@@ -596,11 +598,19 @@ async function renderTasks() {
   const { today: now, later, doneToday } = bucketTasks(rows, today);
 
   tels.list.innerHTML = "";
-  if (!now.length && !doneToday.length) {
-    tels.list.append(el("p", "task-empty", later.length ? "Nothing for today." : "No tasks. Tap ☐ Task to add one."));
+  if (!now.length) {
+    const empty = doneToday.length ? "All done for today."
+      : later.length ? "Nothing for today." : "No tasks. Tap ☐ Task to add one.";
+    tels.list.append(el("p", "task-empty", empty));
   }
   now.forEach((r) => tels.list.append(taskItem(r, today)));
-  doneToday.forEach((r) => tels.list.append(taskItem(r, today)));
+
+  // Finished tasks fold into one quiet line; tap it to see (or un-check) them.
+  tels.doneBtn.hidden = !doneToday.length;
+  tels.doneBtn.textContent = `${taskUi.doneOpen ? "▾" : "▸"} ✓ ${doneToday.length} done`;
+  tels.doneList.innerHTML = "";
+  tels.doneList.hidden = !taskUi.doneOpen || !doneToday.length;
+  if (taskUi.doneOpen) doneToday.forEach((r) => tels.doneList.append(taskItem(r, today)));
 
   tels.laterBtn.hidden = !later.length;
   tels.laterBtn.textContent = `${taskUi.laterOpen ? "▾" : "▸"} Later (${later.length})`;
@@ -624,6 +634,10 @@ function initTasks() {
   tels.toggle.addEventListener("click", () => setTaskToggle(!taskUi.on));
   tels.laterBtn.addEventListener("click", () => {
     taskUi.laterOpen = !taskUi.laterOpen;
+    renderTasks();
+  });
+  tels.doneBtn.addEventListener("click", () => {
+    taskUi.doneOpen = !taskUi.doneOpen;
     renderTasks();
   });
   renderTasks();
