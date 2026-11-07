@@ -991,6 +991,48 @@ syncNow();
 
 // ---------- submit ----------
 
+// Saves the entry on the phone, then tries to send it. Resolves to "sent",
+// "queued", or "failed" (no IndexedDB and the direct send failed too).
+// onSaved runs the moment the entry is safe: right after the local save,
+// or, with no IndexedDB, once the direct send has gone through.
+// `delaySync` holds the send back a few seconds so a check-in can be undone.
+async function captureEntry(entry, { onSaved = () => {}, delaySync = 0 } = {}) {
+  let saved = false;
+  try {
+    await saveEntry(entry);
+    saved = true;
+  } catch (err) {
+    // No IndexedDB (e.g. some private modes) — fall back to a direct send
+    // so capture still works, just without the safety net.
+    console.error(err);
+  }
+
+  if (saved) {
+    onSaved();
+    if (!getSettings().token) {
+      await updatePendingBadge();
+      return "queued";
+    }
+    if (delaySync) {
+      await updatePendingBadge();
+      setTimeout(syncNow, delaySync);
+      return "queued";
+    }
+    const sent = await syncNow();
+    return sent.has(entry.id) ? "sent" : "queued";
+  }
+
+  if (!getSettings().token) return "failed";
+  try {
+    await sendEntryDirect(entry);
+    onSaved();
+    return "sent";
+  } catch (err) {
+    console.error(err);
+    return "failed";
+  }
+}
+
 els.submitBtn.addEventListener("click", async () => {
   const text = els.entryText.value.trim();
   if (!text) {
