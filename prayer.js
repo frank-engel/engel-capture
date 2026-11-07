@@ -810,9 +810,19 @@ function renderCard(req, person, ups) {
     card.appendChild(renderComposer(req));
   } else {
     const actions = el("div", "prayer-actions");
+    if (req.status === "active" && !touched) {
+      // One tap = a blank update for today ("prayed", no note). A mistaken
+      // tap can be removed under Edit.
+      const prayed = el("button", "primary-btn", "🙏 Prayed");
+      prayed.addEventListener("click", () => {
+        prayed.disabled = true;
+        addPrayerUpdate(req.id, { note: null });
+      });
+      actions.appendChild(prayed);
+    }
     if (req.status === "active") {
       // Once touched today the button goes quiet, but still works for a second update.
-      const log = el("button", touched ? "done-btn" : "primary-btn", touched ? "✓ Logged · add more" : "Log update");
+      const log = el("button", touched ? "done-btn" : null, touched ? "✓ Prayed · add note" : "Add note");
       log.addEventListener("click", () => { prayerUi.composingFor = req.id; renderPrayerView(); });
       actions.appendChild(log);
     }
