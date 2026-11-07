@@ -194,7 +194,7 @@
   }
   .chip.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
 
-  /* Journal / Prayer / Note (and the prayer categories) as a slim segmented
+  /* Journal / Prayer / Calendar (and the prayer categories) as a slim segmented
      control: it says which page you're on without competing with the box. */
   #typeRow, #categoryRow {
     flex-wrap: nowrap; gap: 2px; padding: 3px;
@@ -253,21 +253,56 @@
   #entryText::placeholder { color: var(--muted); font-style: italic; opacity: 0.8; }
   #entryText:focus { outline: none; border-color: var(--accent); }
 
-  #recentNotes { display: none; flex-direction: column; gap: 6px; }
-  #recentNotes.show { display: flex; }
-  #recentNotes .recent-notes-label {
-    display: flex; align-items: center; justify-content: space-between;
-    font-size: 0.82rem; color: var(--muted);
+
+  /* Calendar tab: a week row (or the month), a quiet ink dot under days with
+     writing, and the chosen day's entries in the same book face as the box. */
+  #calendarSection { display: none; flex-direction: column; gap: 8px; }
+  #captureView.calendar-mode > :not(#typeRow):not(#calendarSection) { display: none !important; }
+  #captureView.calendar-mode #calendarSection { display: flex; }
+  .cal-head { display: flex; align-items: center; justify-content: space-between; }
+  .cal-month {
+    background: none; border: none; color: var(--text); font-size: 0.95rem;
+    font-weight: 600; padding: 6px 8px; cursor: pointer;
   }
-  #recentNotes .recent-notes-label a { color: var(--accent); text-decoration: none; }
-  #recentNotesList { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
-  .recent-note-item {
-    padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
-    background: var(--panel); color: var(--text); font-size: 0.88rem; cursor: pointer;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  .cal-nav {
+    background: none; border: none; color: var(--muted); font-size: 1.5rem;
+    line-height: 1; padding: 4px 12px; cursor: pointer;
   }
-  .recent-note-item.editing { border-color: var(--accent); }
-  .recent-notes-empty { font-size: 0.82rem; color: var(--muted); }
+  .cal-nav:disabled { opacity: 0.25; cursor: default; }
+  .cal-dow, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; }
+  .cal-dow span { font-size: 0.72rem; color: var(--muted); }
+  .cal-grid { row-gap: 2px; }
+  .cal-cell {
+    background: none; border: none; color: var(--text); cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 6px 0 5px; border-radius: 9px; font-family: inherit;
+  }
+  .cal-num { font-size: 0.9rem; line-height: 1; }
+  .cal-dot { width: 5px; height: 5px; border-radius: 50%; background: transparent; }
+  .cal-dot.on { background: var(--muted); }
+  .cal-cell.today .cal-num { font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+  .cal-cell.selected { background: var(--seg-active); box-shadow: 0 0 0 1px var(--border); }
+  .cal-cell.selected .cal-dot.on { background: var(--text); }
+  .cal-cell.other .cal-num { color: var(--muted); opacity: 0.6; }
+  .cal-cell.future { cursor: default; }
+  .cal-cell.future .cal-num { opacity: 0.3; }
+  .cal-note { font-size: 0.78rem; color: var(--muted); text-align: center; }
+  .cal-note:empty { display: none; }
+  .cal-day { display: flex; flex-direction: column; gap: 10px; padding-top: 6px; border-top: 1px solid var(--border); min-height: 200px; }
+  .cal-day-title { font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+  .cal-checkins { font-size: 0.8rem; color: var(--ok); }
+  .cal-empty { margin: 4px 0; font-size: 0.88rem; color: var(--muted); font-style: italic; }
+  .cal-entry {
+    background: var(--paper); border: 1px solid var(--paper-border); border-radius: 10px;
+    padding: 10px 14px; cursor: pointer;
+  }
+  .cal-entry-time { font-size: 0.75rem; color: var(--muted); margin-bottom: 3px; }
+  .cal-entry-text {
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Charter, "Noto Serif", Georgia, ui-serif, serif;
+    font-size: 1rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .cal-entry-text.expanded { -webkit-line-clamp: unset; display: block; }
 
   button#submitBtn {
     background: var(--accent); color: var(--accent-text);
@@ -390,7 +425,7 @@
   <div class="chip-row" id="typeRow">
     <div class="chip active" data-type="journal">Journal</div>
     <div class="chip" data-type="prayer">Prayer</div>
-    <div class="chip" data-type="note">Note</div>
+    <div class="chip" data-type="calendar">Calendar</div>
   </div>
 
   <div class="chip-row" id="categoryRow">
@@ -425,14 +460,6 @@
 
   <textarea id="entryText" placeholder="Type it and go." autofocus></textarea>
 
-  <div id="recentNotes">
-    <div class="recent-notes-label">
-      <span>Recent Notes</span>
-      <a href="#" id="cancelEditLink" style="display:none;">Cancel edit</a>
-    </div>
-    <div id="recentNotesList"></div>
-  </div>
-
   <div class="submit-row">
     <button id="taskToggle" class="task-toggle" aria-pressed="false" title="Make this capture a task">&#9744; Task</button>
     <button id="submitBtn">Capture</button>
@@ -443,6 +470,18 @@
   </div>
 
   <div id="status"></div>
+
+  <section id="calendarSection" aria-label="Calendar">
+    <div class="cal-head">
+      <button id="calPrev" class="cal-nav" aria-label="Previous week">&lsaquo;</button>
+      <button id="calMonthBtn" class="cal-month" aria-expanded="false"></button>
+      <button id="calNext" class="cal-nav" aria-label="Next week">&rsaquo;</button>
+    </div>
+    <div class="cal-dow" aria-hidden="true"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div>
+    <div id="calGrid" class="cal-grid"></div>
+    <div id="calNote" class="cal-note"></div>
+    <div id="calDay" class="cal-day"></div>
+  </section>
 
   <section id="todayTasks" aria-label="Today's tasks">
     <div class="today-label">Today</div>
@@ -550,6 +589,7 @@
 
 <script src="prayer.js"></script>
 <script src="tasks.js"></script>
+<script src="calendar.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

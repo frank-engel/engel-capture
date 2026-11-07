@@ -13,7 +13,6 @@ const PRAYER_LIST_PATH = "Spaces/Prayer/Prayer List.md";
 const state = {
   type: "journal",
   category: "people",
-  editingNoteBlock: null,
 };
 
 const els = {
@@ -26,9 +25,6 @@ const els = {
   recurWhenDoneInput: document.getElementById("recurWhenDoneInput"),
   whenDoneLabel: document.getElementById("whenDoneLabel"),
   entryText: document.getElementById("entryText"),
-  recentNotes: document.getElementById("recentNotes"),
-  recentNotesList: document.getElementById("recentNotesList"),
-  cancelEditLink: document.getElementById("cancelEditLink"),
   submitBtn: document.getElementById("submitBtn"),
   status: document.getElementById("status"),
   settingsBtn: document.getElementById("settingsBtn"),
@@ -179,22 +175,15 @@ els.typeRow.addEventListener("click", async (e) => {
     return;
   }
   state.type = chip.dataset.type;
-  setEditingNote(null);
   [...els.typeRow.children].forEach((c) => c.classList.toggle("active", c === chip));
   els.categoryRow.classList.toggle("show", state.type === "prayer");
   els.taskFields.classList.toggle("show", state.type === "task");
-  els.recentNotes.classList.toggle("show", state.type === "note");
   els.checkinRow.classList.toggle("show", state.type === "journal");
   tels.toggle.hidden = state.type !== "journal";
   tels.section.hidden = state.type !== "journal";
   if (state.type !== "journal") setTaskToggle(false);
-  if (state.type === "note") loadRecentNotes();
-});
-
-els.cancelEditLink.addEventListener("click", (e) => {
-  e.preventDefault();
-  setEditingNote(null);
-  els.entryText.value = "";
+  els.captureView.classList.toggle("calendar-mode", state.type === "calendar");
+  if (state.type === "calendar") openCalendar();
 });
 
 els.categoryRow.addEventListener("click", (e) => {
@@ -475,134 +464,6 @@ async function sendEntryDirect(entry) {
   const existing = await getFile(path);
   const updated = applyEntry(existing ? existing.content : null, entry);
   await putFile(path, updated, existing ? existing.sha : null, entryCommitMessage(entry));
-}
-
-// ---------- recent notes ----------
-//
-// A capture's text can itself contain newlines (multi-line textarea input).
-// applyEncounter writes those as an indented list continuation (two
-// leading spaces), so a block's continuation lines are exactly the ones
-// that are blank or indented — anything else (unrelated vault content,
-// another capture, a heading) ends the block. Without the indent check
-// this would happily swallow everything up to the next heading, capture
-// or not.
-
-const NOTE_LINE_RE = /^- #capture\/note \d{4}-\d{2}-\d{2} — /;
-const CAPTURE_START_RE = /^-\s(?:\[.\]\s)?#capture\//;
-
-let currentNoteBlocks = [];
-
-function isBlockContinuation(line) {
-  return line === "" || line.startsWith("  ");
-}
-
-function capturesSection(content) {
-  const lines = content.split("\n");
-  const headingIdx = lines.findIndex((l) => l.trim() === CAPTURES_HEADING);
-  if (headingIdx === -1) return [];
-  let nextHeadingIdx = lines.findIndex(
-    (l, i) => i > headingIdx && /^#{1,6}\s/.test(l)
-  );
-  if (nextHeadingIdx === -1) nextHeadingIdx = lines.length;
-  return lines.slice(headingIdx + 1, nextHeadingIdx);
-}
-
-function captureBlocks(section) {
-  const blocks = [];
-  let current = null;
-  for (const line of section) {
-    if (CAPTURE_START_RE.test(line)) {
-      current = [line];
-      blocks.push(current);
-    } else if (current && isBlockContinuation(line)) {
-      current.push(line);
-    } else {
-      current = null;
-    }
-  }
-  return blocks;
-}
-
-function parseRecentNotes(content) {
-  return captureBlocks(capturesSection(content)).filter((block) =>
-    NOTE_LINE_RE.test(block[0])
-  );
-}
-
-function blockText(block) {
-  const rest = block.slice(1).map((l) => (l.startsWith("  ") ? l.slice(2) : l));
-  return [block[0].replace(NOTE_LINE_RE, ""), ...rest].join("\n").trimEnd();
-}
-
-function findBlockIndex(lines, block) {
-  outer: for (let i = 0; i <= lines.length - block.length; i++) {
-    for (let j = 0; j < block.length; j++) {
-      if (lines[i + j] !== block[j]) continue outer;
-    }
-    return i;
-  }
-  return -1;
-}
-
-function setEditingNote(block) {
-  state.editingNoteBlock = block;
-  els.cancelEditLink.style.display = block ? "inline" : "none";
-  [...els.recentNotesList.children].forEach((c, i) => {
-    c.classList.toggle("editing", currentNoteBlocks[i] === block);
-  });
-}
-
-function renderRecentNotes(blocks) {
-  currentNoteBlocks = blocks.slice(0, 15);
-  els.recentNotesList.innerHTML = "";
-  if (!currentNoteBlocks.length) {
-    const empty = document.createElement("div");
-    empty.className = "recent-notes-empty";
-    empty.textContent = "No notes yet.";
-    els.recentNotesList.appendChild(empty);
-    return;
-  }
-  currentNoteBlocks.forEach((block) => {
-    const item = document.createElement("div");
-    item.className = "recent-note-item";
-    item.textContent = blockText(block).replace(/\n/g, " ↵ ");
-    if (block === state.editingNoteBlock) item.classList.add("editing");
-    item.addEventListener("click", () => {
-      els.entryText.value = blockText(block);
-      setEditingNote(block);
-      els.entryText.focus();
-    });
-    els.recentNotesList.appendChild(item);
-  });
-}
-
-async function loadRecentNotes() {
-  const { token } = getSettings();
-  if (!token) {
-    els.recentNotesList.innerHTML = '<div class="recent-notes-empty">Set up your GitHub token to see recent notes.</div>';
-    return;
-  }
-  els.recentNotesList.innerHTML = '<div class="recent-notes-empty">Loading…</div>';
-  try {
-    const existing = await getFile(ENCOUNTERS_PATH);
-    renderRecentNotes(existing ? parseRecentNotes(existing.content) : []);
-  } catch (err) {
-    console.error(err);
-    els.recentNotesList.innerHTML = '<div class="recent-notes-empty">Couldn\'t load notes.</div>';
-  }
-}
-
-async function updateNote(oldBlock, newText) {
-  const existing = await getFile(ENCOUNTERS_PATH);
-  if (!existing) throw new Error("Inbox not found");
-  const lines = existing.content.split("\n");
-  const idx = findBlockIndex(lines, oldBlock);
-  if (idx === -1) throw new Error("Note not found — it may have changed.");
-  const prefix = oldBlock[0].match(NOTE_LINE_RE)[0];
-  const newLines = buildCaptureLines(prefix, newText);
-  lines.splice(idx, oldBlock.length, ...newLines);
-  const { date, time } = nowParts();
-  await putFile(ENCOUNTERS_PATH, lines.join("\n"), existing.sha, `Update note: ${date} ${time}`);
 }
 
 // ---------- local database ----------
@@ -1130,66 +991,6 @@ syncNow();
 
 // ---------- submit ----------
 
-async function submitNoteEdit(text) {
-  els.submitBtn.disabled = true;
-  setStatus("Sending…", "pending");
-  try {
-    await updateNote(state.editingNoteBlock, text);
-    setEditingNote(null);
-    await loadRecentNotes();
-    els.entryText.value = "";
-    setStatus("");
-    acknowledge("Saved");
-  } catch (err) {
-    console.error(err);
-    setStatus("Failed — check your token/settings and try again.", "err");
-  } finally {
-    els.submitBtn.disabled = false;
-  }
-}
-
-// Saves the entry on the phone, then tries to send it. Resolves to "sent",
-// "queued", or "failed" (no IndexedDB and the direct send failed too).
-// onSaved runs the moment the entry is safe: right after the local save,
-// or, with no IndexedDB, once the direct send has gone through.
-// `delaySync` holds the send back a few seconds so a check-in can be undone.
-async function captureEntry(entry, { onSaved = () => {}, delaySync = 0 } = {}) {
-  let saved = false;
-  try {
-    await saveEntry(entry);
-    saved = true;
-  } catch (err) {
-    // No IndexedDB (e.g. some private modes) — fall back to a direct send
-    // so capture still works, just without the safety net.
-    console.error(err);
-  }
-
-  if (saved) {
-    onSaved();
-    if (!getSettings().token) {
-      await updatePendingBadge();
-      return "queued";
-    }
-    if (delaySync) {
-      await updatePendingBadge();
-      setTimeout(syncNow, delaySync);
-      return "queued";
-    }
-    const sent = await syncNow();
-    return sent.has(entry.id) ? "sent" : "queued";
-  }
-
-  if (!getSettings().token) return "failed";
-  try {
-    await sendEntryDirect(entry);
-    onSaved();
-    return "sent";
-  } catch (err) {
-    console.error(err);
-    return "failed";
-  }
-}
-
 els.submitBtn.addEventListener("click", async () => {
   const text = els.entryText.value.trim();
   if (!text) {
@@ -1198,10 +999,6 @@ els.submitBtn.addEventListener("click", async () => {
   }
   if (state.type === "task" && els.recurUnitInput.value && !els.dueDateInput.value) {
     setStatus("Recurring tasks need a due date to recur from.", "err");
-    return;
-  }
-  if (state.type === "note" && state.editingNoteBlock) {
-    await submitNoteEdit(text);
     return;
   }
   if (state.type === "journal" && taskUi.on) {
@@ -1261,7 +1058,6 @@ els.submitBtn.addEventListener("click", async () => {
   if (outcome === "sent") {
     setStatus("");
     acknowledge();
-    if (entry.type === "note") await loadRecentNotes();
   } else if (outcome === "queued") {
     // Safe on the phone, just not sent yet: still worth the check.
     acknowledge();
