@@ -89,6 +89,14 @@
   .prayer-updates { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 3px; }
   .prayer-updates li { font-size: 0.85rem; line-height: 1.35; }
   .update-date { color: var(--muted); font-size: 0.78rem; }
+  .prayer-toolbar-right { display: flex; gap: 8px; }
+  .prayer-toolbar-right button { white-space: nowrap; }
+  .prayer-arrange-row { flex-direction: row; align-items: center; gap: 10px; }
+  .prayer-arrange-label { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .prayer-arrange-summary { font-size: 0.85rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prayer-arrange-btns { display: flex; gap: 6px; }
+  #prayerView .prayer-arrange-btns button { min-width: 40px; min-height: 40px; font-size: 1.1rem; padding: 0; }
+  #prayerView .prayer-arrange-btns button:disabled { opacity: 0.3; }
   .prayer-actions { display: flex; gap: 8px; justify-content: flex-end; }
   #prayerView .prayer-actions button { padding: 6px 12px; font-size: 0.85rem; }
   .prayer-composer { display: flex; flex-direction: column; gap: 8px; }
@@ -342,7 +350,10 @@
   <div class="prayer-toolbar">
     <button id="prayerBackBtn">&larr; Back</button>
     <span id="prayerSyncState" class="prayer-sync"></span>
-    <button id="prayerNewBtn" class="primary-btn" hidden>+ New prayer</button>
+    <span class="prayer-toolbar-right">
+      <button id="prayerArrangeBtn" hidden>Arrange</button>
+      <button id="prayerNewBtn" class="primary-btn" hidden>+ New prayer</button>
+    </span>
   </div>
   <div id="prayerBanner" class="prayer-banner" hidden></div>
   <input id="prayerSearch" type="search" placeholder="Find a name or word" autocomplete="off" hidden>

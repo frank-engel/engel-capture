@@ -45,6 +45,7 @@ const pels = {
   syncState: document.getElementById("prayerSyncState"),
   search: document.getElementById("prayerSearch"),
   newBtn: document.getElementById("prayerNewBtn"),
+  arrangeBtn: document.getElementById("prayerArrangeBtn"),
   reqDialog: document.getElementById("prayerRequestDialog"),
   reqTitle: document.getElementById("prayerReqTitle"),
   reqPerson: document.getElementById("prayerReqPerson"),
@@ -72,7 +73,7 @@ const pels = {
 };
 
 let prayerData = { persons: [], requests: [], updates: [], meta: null };
-const prayerUi = { composingFor: null, expanded: new Set(), editingId: null, closing: null };
+const prayerUi = { composingFor: null, expanded: new Set(), editingId: null, closing: null, arranging: false };
 
 // ---------- ids and dates ----------
 
@@ -550,6 +551,23 @@ async function deletePrayerRequest(reqId) {
   await commitPrayerChange({ requests: [{ ...req, deleted_at: now, updated_at: now }] });
 }
 
+// Swaps a prayer with its neighbour in the same category (dir -1 = up,
+// +1 = down). Only sort_key changes: updated_at stays put, so rearranging
+// doesn't count as praying for someone today.
+async function movePrayerRequest(reqId, dir) {
+  const req = prayerData.requests.find((r) => r.id === reqId);
+  if (!req) return;
+  const peers = prayerData.requests
+    .filter((r) => !r.deleted_at && r.status === "active" && r.category === req.category)
+    .sort(bySortKey);
+  const i = peers.indexOf(req);
+  const other = peers[i + dir];
+  if (!other) return;
+  let a = req.sort_key, b = other.sort_key;
+  if (a === b) { a = b + dir; } // ties (old imports) still need to move
+  await commitPrayerChange({ requests: [{ ...req, sort_key: b }, { ...other, sort_key: a }] });
+}
+
 // ---------- view ----------
 
 function setPrayerStatus(msg, kind) {
@@ -692,6 +710,28 @@ function touchedToday(req, ups) {
   return req.updated_at > importedAt && nowParts(new Date(req.updated_at)).date === today;
 }
 
+// Arrange mode: one compact row per prayer with up/down arrows.
+function renderArrangeRow(req, person, isFirst, isLast) {
+  const row = el("div", "prayer-card prayer-arrange-row");
+  const label = el("div", "prayer-arrange-label");
+  const title = person ? person.name : "";
+  if (title) label.appendChild(el("span", "prayer-name", title));
+  label.appendChild(el("span", "prayer-arrange-summary", req.summary));
+  row.appendChild(label);
+  const btns = el("div", "prayer-arrange-btns");
+  const up = el("button", null, "↑");
+  up.setAttribute("aria-label", "Move up");
+  up.disabled = isFirst;
+  up.addEventListener("click", () => movePrayerRequest(req.id, -1));
+  const down = el("button", null, "↓");
+  down.setAttribute("aria-label", "Move down");
+  down.disabled = isLast;
+  down.addEventListener("click", () => movePrayerRequest(req.id, 1));
+  btns.append(up, down);
+  row.appendChild(btns);
+  return row;
+}
+
 function renderCard(req, person, ups) {
   const touched = req.status === "active" && touchedToday(req, ups);
   const card = el("div", "prayer-card" + (touched ? " touched" : ""));
@@ -752,9 +792,13 @@ function renderPrayerView() {
   renderConflictBanner();
   pels.content.innerHTML = "";
   const m = prayerData.meta;
-  pels.newBtn.hidden = !(m && m.imported_at);
-  pels.search.hidden = !(m && m.imported_at);
+  pels.newBtn.hidden = !(m && m.imported_at) || prayerUi.arranging;
+  pels.search.hidden = !(m && m.imported_at) || prayerUi.arranging;
+  pels.arrangeBtn.hidden = !(m && m.imported_at);
+  pels.arrangeBtn.textContent = prayerUi.arranging ? "Done" : "Arrange";
+  pels.arrangeBtn.classList.toggle("primary-btn", prayerUi.arranging);
   if (!m || !m.imported_at) { renderImportPanel(); return; }
+  if (prayerUi.arranging) { renderArrangeView(); return; }
 
   const personById = new Map(prayerData.persons.map((p) => [p.id, p]));
   const ups = updatesByRequest(prayerData.updates);
@@ -786,6 +830,18 @@ function renderPrayerView() {
     pels.content.appendChild(details);
   }
   if (q && !live.length) pels.content.appendChild(el("p", "muted", "No matches."));
+}
+
+function renderArrangeView() {
+  const personById = new Map(prayerData.persons.map((p) => [p.id, p]));
+  pels.content.appendChild(el("p", "muted", "Use the arrows to set the order within each group. Tap Done when you're finished."));
+  for (const cat of PRAYER_CATEGORIES) {
+    const reqs = prayerData.requests
+      .filter((r) => !r.deleted_at && r.status === "active" && r.category === cat.slug).sort(bySortKey);
+    pels.content.appendChild(el("h2", null, cat.title));
+    if (!reqs.length) { pels.content.appendChild(el("p", "muted", "Nothing here.")); continue; }
+    reqs.forEach((r, i) => pels.content.appendChild(renderArrangeRow(r, personById.get(r.person_id), i === 0, i === reqs.length - 1)));
+  }
 }
 
 async function openPrayerView() {
@@ -911,6 +967,11 @@ pels.closeSave.addEventListener("click", async (e) => {
 });
 
 pels.newBtn.addEventListener("click", () => openRequestDialog(null));
+pels.arrangeBtn.addEventListener("click", () => {
+  prayerUi.arranging = !prayerUi.arranging;
+  prayerUi.composingFor = null;
+  renderPrayerView();
+});
 pels.search.addEventListener("input", renderPrayerView);
 
 // The capture screen's Prayer chip: once the list is imported, a prayer

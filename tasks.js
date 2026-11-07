@@ -45,6 +45,12 @@ const TASK_DONE_RE = /✅\s*(\d{4}-\d{2}-\d{2})/;
 const TASK_PRIORITY = { "🔺": 5, "⏫": 4, "🔼": 3, "🔽": 1, "⏬": 0 };
 // Every Tasks-plugin field emoji: the description is the text before the first.
 const TASK_FIELD_RE = /\s*(?:📅|⏳|🛫|✅|➕|❌|🔁|🔺|⏫|🔼|🔽|⏬|🆔|⛔)/u;
+// A due date as typed on a phone: any calendar emoji, then an ISO date,
+// today/tomorrow, a weekday ("fri", "next Friday"), or 11/10[/26].
+// normalizeDue turns it into the Tasks plugin's "📅 YYYY-MM-DD".
+const TASK_LOOSE_DUE_RE = /(?:📅|🗓\uFE0F?|📆)\uFE0F?\s*(\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}(?:\/\d{2}(?:\d{2})?)?|today|tomorrow|tmrw|(?:next\s+)?(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*)?/iu;
+const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+const WEEKDAYS_FULL = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 // Old Inbox captures carried "#capture/task 2026-10-05 19:49 — " up front.
 const TASK_OLD_PREFIX_RE = /^(?:#capture\/task\s+)?\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2})?\s+—\s+/;
 
@@ -73,6 +79,60 @@ function taskHash(str) {
 
 function daysBetween(a, b) {
   return Math.round((Date.parse(b + "T12:00:00") - Date.parse(a + "T12:00:00")) / 86400000);
+}
+
+function addDays(iso, n) {
+  const d = new Date(iso + "T12:00:00");
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// The date a loosely typed due phrase means, counted from `ref`
+// (YYYY-MM-DD, the day the task was written). null if it isn't a date.
+function resolveDuePhrase(phrase, ref) {
+  const w = phrase.toLowerCase().replace(/^next\s+/, "");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(w)) return w;
+  if (w === "today") return ref;
+  if (w === "tomorrow" || w === "tmrw") return addDays(ref, 1);
+  const wd = WEEKDAYS.indexOf(w.slice(0, 3));
+  if (wd !== -1) {
+    if (!WEEKDAYS_FULL[wd].startsWith(w) && w !== "weds") return null;
+    const from = new Date(ref + "T12:00:00").getDay();
+    return addDays(ref, ((wd - from + 6) % 7) + 1); // the next one, never today
+  }
+  const md = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/.exec(w);
+  if (md) {
+    const [mo, da] = [Number(md[1]), Number(md[2])];
+    if (mo < 1 || mo > 12 || da < 1 || da > 31) return null;
+    let yr = md[3] ? Number(md[3].length === 2 ? "20" + md[3] : md[3]) : Number(ref.slice(0, 4));
+    const pad = (n) => String(n).padStart(2, "0");
+    let iso = `${yr}-${pad(mo)}-${pad(da)}`;
+    // No year and well in the past means next year (typed in December for January).
+    if (!md[3] && daysBetween(iso, ref) > 60) iso = `${yr + 1}-${pad(mo)}-${pad(da)}`;
+    return iso;
+  }
+  return null;
+}
+// Rewrites a loosely typed due date into "📅 YYYY-MM-DD". Text with no
+// recognizable date after the emoji is left exactly as it was.
+function normalizeDue(text, ref) {
+  const m = TASK_LOOSE_DUE_RE.exec(text);
+  if (!m || !m[1]) return text;
+  if (/^📅\s*\d{4}-\d{2}-\d{2}$/u.test(m[0])) return text; // already right
+  const iso = resolveDuePhrase(m[1], ref);
+  if (!iso) return text;
+  // Tasks wants its fields after the description, so words typed after
+  // the date stay in front of it.
+  const before = text.slice(0, m.index).trimEnd();
+  const after = text.slice(m.index + m[0].length).trim();
+  const fieldAt = after.search(TASK_FIELD_RE);
+  const words = fieldAt === -1 ? after : after.slice(0, fieldAt).trim();
+  const fields = fieldAt === -1 ? "" : " " + after.slice(fieldAt).trim();
+  return `${before}${words ? " " + words : ""} 📅 ${iso}${fields}`;
+}
+
+function needsDueNormalizing(line) {
+  return /🗓|📆|📅\s*[^\d\s]/u.test(line);
 }
 
 // ---------- parsing and rewriting task lines ----------
@@ -117,6 +177,7 @@ function rewriteTaskLine(line, want) {
     rest = rest.replace(/\s*✅\s*\d{4}-\d{2}-\d{2}/g, "");
     if (want.done) rest += ` ✅ ${want.done_date}`;
   }
+  if (want.normalize_ref) rest = normalizeDue(rest, want.normalize_ref);
   if ("scheduled" in want) {
     rest = rest.replace(/\s*⏳\s*\d{4}-\d{2}-\d{2}/g, "");
     if (want.scheduled) rest += ` ⏳ ${want.scheduled}`;
@@ -217,7 +278,7 @@ async function captureTask(text) {
   row.block_id = row.id;
   // Typed fields ride along ("… 📅 2026-11-06"): written as typed, shown
   // on the list as a date.
-  row.line_text = row.text;
+  row.line_text = row.text = normalizeDue(row.text, date);
   const parsed = parseTaskLine(`- [ ] ${row.text}`);
   Object.assign(row, { text: parsed.text, due: parsed.due, scheduled: parsed.scheduled, priority: parsed.priority });
   await dbTx([TASKS_STORE], "readwrite", (s) => { s[TASKS_STORE].add(row); });
@@ -273,6 +334,7 @@ async function planTaskWrites(files, read) {
     const want = {};
     if (row.pending.done) { want.done = row.done; want.done_date = row.done_date; }
     if (row.pending.scheduled) want.scheduled = row.scheduled;
+    if (row.pending.normalize) want.normalize_ref = row.created_date;
     if (Object.keys(want).length) {
       // An id-less Tasks MOC line gets an id with this edit.
       if (!row.block_id) want.block_id = rec.block_id = newTaskId();
@@ -387,16 +449,28 @@ async function refreshTasksFromVault(force) {
   }
 
   const known = new Map(rows.map((r) => [r.block_id || r.id, r]));
+  let needsSync = false;
   const updates = [];
   const removes = [];
   for (const r of live) {
     const hit = r.block_id ? byId.get(r.block_id) : openLines.find((l) => l.raw === r.raw);
     if (hit) {
-      updates.push({ id: r.id, rev: r.rev, fields: {
+      const fields = {
         text: hit.text, done: hit.done, done_date: hit.done_date, due: hit.due,
         scheduled: hit.scheduled, priority: hit.priority, recurring: hit.recurring,
         path: hit.path, raw: hit.raw, missing: false,
-      } });
+      };
+      // "🗓️ Wednesday" typed on the phone: fix the line in the vault on the
+      // next sync, counting from the day the task was written.
+      if (r.source === "app" && r.block_id && !hit.done && needsDueNormalizing(hit.raw)) {
+        const fixed = normalizeDue(hit.raw, r.created_date);
+        if (fixed !== hit.raw) {
+          fields.due = parseTaskLine(fixed).due;
+          fields.pending = { normalize: true };
+          needsSync = true;
+        }
+      }
+      updates.push({ id: r.id, rev: r.rev, fields });
     } else if (r.source === "vault" && !r.block_id) {
       removes.push({ id: r.id, rev: r.rev }); // checked off or edited in Obsidian
     } else {
@@ -444,6 +518,7 @@ async function refreshTasksFromVault(force) {
     for (const a of added) store.put(a);
   });
   renderTasks();
+  if (needsSync) scheduleTaskSync();
 }
 
 // ---------- the Today list ----------
