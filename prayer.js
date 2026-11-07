@@ -568,6 +568,43 @@ async function movePrayerRequest(reqId, dir) {
   await commitPrayerChange({ requests: [{ ...req, sort_key: b }, { ...other, sort_key: a }] });
 }
 
+// One-tap sorts in Arrange mode. Each rewrites the order of every category
+// once (sort_key only, like the arrows); the arrows can fine-tune after.
+const PRAYER_SORTS = [
+  { label: "A–Z", key: "az" },
+  { label: "Oldest", key: "oldest" },
+  { label: "Newest", key: "newest" },
+  { label: "Recent", key: "recent" },
+];
+
+async function sortPrayerRequests(how) {
+  const personById = new Map(prayerData.persons.map((p) => [p.id, p]));
+  const ups = updatesByRequest(prayerData.updates);
+  const name = (r) => ((personById.get(r.person_id) || {}).name || r.summary || "").toLowerCase();
+  const last = (r) => { const d = requestDates(r, ups.get(r.id) || []); return d[d.length - 1] || ""; };
+  const cmp = {
+    az: (a, b) => name(a).localeCompare(name(b)),
+    oldest: (a, b) => (a.opened_on || "").localeCompare(b.opened_on || "") || a.created_at - b.created_at,
+    newest: (a, b) => (b.opened_on || "").localeCompare(a.opened_on || "") || b.created_at - a.created_at,
+    recent: (a, b) => last(b).localeCompare(last(a)) || bySortKey(a, b),
+  }[how];
+  const changed = [];
+  for (const cat of PRAYER_CATEGORIES) {
+    const reqs = prayerData.requests
+      .filter((r) => !r.deleted_at && r.status === "active" && r.category === cat.slug)
+      .sort(bySortKey);
+    const keys = reqs.map((r) => r.sort_key).sort((a, b) => a - b);
+    // Reuse the category's own keys (made unique), so nothing else shifts.
+    let prev = -Infinity;
+    [...reqs].sort((a, b) => cmp(a, b) || bySortKey(a, b)).forEach((r, i) => {
+      const k = Math.max(keys[i], prev + 1);
+      prev = k;
+      if (r.sort_key !== k) changed.push({ ...r, sort_key: k });
+    });
+  }
+  if (changed.length) await commitPrayerChange({ requests: changed });
+}
+
 // ---------- view ----------
 
 function setPrayerStatus(msg, kind) {
@@ -835,6 +872,14 @@ function renderPrayerView() {
 function renderArrangeView() {
   const personById = new Map(prayerData.persons.map((p) => [p.id, p]));
   pels.content.appendChild(el("p", "muted", "Use the arrows to set the order within each group. Tap Done when you're finished."));
+  const sortRow = el("div", "prayer-sort-row");
+  sortRow.appendChild(el("span", "muted", "Sort:"));
+  for (const s of PRAYER_SORTS) {
+    const b = el("button", null, s.label);
+    b.addEventListener("click", () => sortPrayerRequests(s.key));
+    sortRow.appendChild(b);
+  }
+  pels.content.appendChild(sortRow);
   for (const cat of PRAYER_CATEGORIES) {
     const reqs = prayerData.requests
       .filter((r) => !r.deleted_at && r.status === "active" && r.category === cat.slug).sort(bySortKey);
