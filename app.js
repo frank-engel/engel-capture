@@ -100,7 +100,7 @@ let ackTimer = null;
 function acknowledge(label = "Captured") {
   els.submitBtn.dataset.ack = "✓ " + label;
   els.submitBtn.classList.add("acked");
-  try { navigator.vibrate?.(12); } catch { /* not supported */ }
+  try { navigator.vibrate?.(35); } catch { /* not supported */ }
   clearTimeout(ackTimer);
   ackTimer = setTimeout(() => els.submitBtn.classList.remove("acked"), 1400);
 }
