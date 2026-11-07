@@ -6,12 +6,25 @@
 <title>Engel Capture</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1b1b1f">
+<script>
+  // Apply a saved Light/Dark choice before first paint, so there's no flash.
+  // "auto" (or nothing saved) leaves it to the phone's own setting.
+  try {
+    var t = localStorage.getItem("ec_theme");
+    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+  } catch (e) {}
+</script>
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
 <style>
+  /* Dark is the default palette. Light is warm paper and ink, used when the
+     phone is in light mode (Auto) or when Settings says Light. */
   :root {
+    color-scheme: dark;
     --bg: #1b1b1f;
     --panel: #26262c;
+    --paper: #24242a;
+    --paper-border: #34343b;
     --text: #eceef2;
     --muted: #9a9aa4;
     --accent: #7c9cff;
@@ -19,6 +32,39 @@
     --ok: #6fcf97;
     --err: #eb5757;
     --border: #38383f;
+    --backdrop: rgba(0,0,0,0.6);
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      color-scheme: light;
+      --bg: #f6f3ed;
+      --panel: #fdfbf7;
+      --paper: #fffdf8;
+      --paper-border: #e6dfd3;
+      --text: #2b2925;
+      --muted: #736d64;
+      --accent: #4a63c4;
+      --accent-text: #ffffff;
+      --ok: #2e8253;
+      --err: #c0392b;
+      --border: #ddd6ca;
+      --backdrop: rgba(40,34,26,0.35);
+    }
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #f6f3ed;
+    --panel: #fdfbf7;
+    --paper: #fffdf8;
+    --paper-border: #e6dfd3;
+    --text: #2b2925;
+    --muted: #736d64;
+    --accent: #4a63c4;
+    --accent-text: #ffffff;
+    --ok: #2e8253;
+    --err: #c0392b;
+    --border: #ddd6ca;
+    --backdrop: rgba(40,34,26,0.35);
   }
   * { box-sizing: border-box; }
   html, body {
@@ -36,7 +82,7 @@
     display: flex; align-items: center; justify-content: space-between;
     padding: 16px 0 8px;
   }
-  header h1 { font-size: 1.1rem; margin: 0; font-weight: 600; }
+  header h1 { font-size: 1.1rem; margin: 0; font-weight: 600; letter-spacing: 0.01em; }
   .header-actions { display: flex; align-items: center; gap: 4px; }
   .icon-btn {
     background: none; border: none; color: var(--muted);
@@ -167,6 +213,16 @@
   }
   textarea:focus { outline: 2px solid var(--accent); }
 
+  /* The journal page: paper, a book face for what you write, room between
+     lines. Buttons and labels stay in the plain system font. */
+  #entryText {
+    background: var(--paper); border-color: var(--paper-border);
+    padding: 14px 16px; font-size: 1.08rem; line-height: 1.6;
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Charter, "Noto Serif", Georgia, ui-serif, serif;
+  }
+  #entryText::placeholder { color: var(--muted); font-style: italic; opacity: 0.8; }
+  #entryText:focus { outline: none; border-color: var(--accent); }
+
   #recentNotes { display: none; flex-direction: column; gap: 6px; }
   #recentNotes.show { display: flex; }
   #recentNotes .recent-notes-label {
@@ -189,6 +245,20 @@
     font-size: 1.05rem; font-weight: 700; cursor: pointer;
   }
   button#submitBtn:disabled { opacity: 0.5; }
+  /* Capture acknowledgment: the label fades to a check for a moment, then
+     back. The real label stays underneath, so nothing else has to know. */
+  button#submitBtn { position: relative; transition: color 0.25s ease; }
+  button#submitBtn::after {
+    content: attr(data-ack); position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent-text); opacity: 0; transition: opacity 0.25s ease;
+    pointer-events: none;
+  }
+  button#submitBtn.acked { color: transparent; }
+  button#submitBtn.acked::after { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    button#submitBtn, button#submitBtn::after { transition: none; }
+  }
   .submit-row { display: flex; gap: 8px; }
   .submit-row #submitBtn { flex: 1; }
   .task-toggle {
@@ -250,7 +320,7 @@
     border: 1px solid var(--border); border-radius: 12px;
     padding: 20px; width: min(92vw, 420px);
   }
-  dialog::backdrop { background: rgba(0,0,0,0.6); }
+  dialog::backdrop { background: var(--backdrop); }
   dialog h2 { margin-top: 0; font-size: 1rem; }
   dialog label { display: block; font-size: 0.85rem; color: var(--muted); margin-top: 12px; }
   dialog input {
@@ -273,7 +343,7 @@
 <body>
 
 <header>
-  <h1>Engel Capture</h1>
+  <h1 id="todayTitle">Engel Capture</h1>
   <div class="header-actions">
     <button id="pendingBtn" class="pending-pill" hidden>&#8635; <span id="pendingCount">0</span></button>
     <button id="prayerNavBtn" class="icon-btn" title="Prayer List" aria-label="Prayer List" hidden>&#128591;</button>
@@ -421,6 +491,12 @@
   <input id="ownerInput" type="text" placeholder="frank-engel">
   <label for="repoInput">Repo name</label>
   <input id="repoInput" type="text" placeholder="Engel-Personal">
+  <label for="themeInput">Appearance</label>
+  <select id="themeInput">
+    <option value="auto">Auto (follow the phone)</option>
+    <option value="light">Light</option>
+    <option value="dark">Dark</option>
+  </select>
   <label for="practice1Input">Daily practices (up to 3)</label>
   <input id="practice1Input" class="practice-input" type="text" placeholder="e.g. Daily Office">
   <input id="practice2Input" class="practice-input" type="text" placeholder="e.g. Lectio">

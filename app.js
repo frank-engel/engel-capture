@@ -47,7 +47,63 @@ const els = {
   checkinRow: document.getElementById("checkinRow"),
   oneByOneInput: document.getElementById("oneByOneInput"),
   practiceInputs: [1, 2, 3].map((n) => document.getElementById(`practice${n}Input`)),
+  themeInput: document.getElementById("themeInput"),
+  todayTitle: document.getElementById("todayTitle"),
 };
+
+// ---------- appearance ----------
+//
+// Auto follows the phone's light/dark setting; Light or Dark pins it. The
+// choice is applied before first paint by a small script in index.html; this
+// keeps it in step afterwards and colors the phone's status bar to match.
+
+const THEME_KEY = "ec_theme";
+
+function getTheme() {
+  const t = localStorage.getItem(THEME_KEY);
+  return t === "light" || t === "dark" ? t : "auto";
+}
+
+function applyTheme(theme = getTheme()) {
+  const root = document.documentElement;
+  if (theme === "auto") delete root.dataset.theme;
+  else root.dataset.theme = theme;
+  const bg = getComputedStyle(root).getPropertyValue("--bg").trim();
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta && bg) meta.setAttribute("content", bg);
+}
+
+els.themeInput.addEventListener("change", () => {
+  // Takes effect right away, so you can see it before closing Settings.
+  localStorage.setItem(THEME_KEY, els.themeInput.value);
+  applyTheme();
+});
+window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => applyTheme());
+applyTheme();
+
+// ---------- today's page ----------
+//
+// The header shows today's date ("Saturday, Nov 7") instead of the app name:
+// this is today's page. Refreshed when you come back to the app.
+
+function renderTodayTitle() {
+  els.todayTitle.textContent = new Date().toLocaleDateString(undefined, {
+    weekday: "long", month: "short", day: "numeric",
+  });
+}
+renderTodayTitle();
+
+// A quiet "it's safe" moment on the Capture button: its label fades to a
+// check for a beat, plus a tiny buzz where the phone supports it. Errors
+// and anything needing action still use the status line.
+let ackTimer = null;
+function acknowledge(label = "Captured") {
+  els.submitBtn.dataset.ack = "✓ " + label;
+  els.submitBtn.classList.add("acked");
+  try { navigator.vibrate?.(12); } catch { /* not supported */ }
+  clearTimeout(ackTimer);
+  ackTimer = setTimeout(() => els.submitBtn.classList.remove("acked"), 1400);
+}
 
 // ---------- settings ----------
 
@@ -68,6 +124,7 @@ function openSettings() {
   els.oneByOneInput.checked = s.oneByOne;
   const labels = getPractices().map((p) => p.label);
   els.practiceInputs.forEach((input, i) => { input.value = labels[i] || ""; });
+  els.themeInput.value = getTheme();
   els.settingsDialog.showModal();
 }
 
@@ -1031,7 +1088,7 @@ async function runSync() {
   // Read task lines back (due dates, check-offs made in Obsidian), and show
   // whatever this sync changed.
   refreshTasksFromVault(sent.size > 0).catch((err) => console.error(err)).finally(renderTasks);
-  // A submit that sent straight through overwrites this with "Captured."
+  // A submit that sent straight through clears this and shows its own check.
   if (sent.size && remaining === 0) {
     setStatus(sent.size === 1 ? "Queued capture sent." : `${sent.size} queued captures sent.`, "ok");
   }
@@ -1081,7 +1138,8 @@ async function submitNoteEdit(text) {
     setEditingNote(null);
     await loadRecentNotes();
     els.entryText.value = "";
-    setStatus("Captured.", "ok");
+    setStatus("");
+    acknowledge("Saved");
   } catch (err) {
     console.error(err);
     setStatus("Failed — check your token/settings and try again.", "err");
@@ -1152,12 +1210,14 @@ els.submitBtn.addEventListener("click", async () => {
       els.entryText.value = "";
       setTaskToggle(false);
       renderTasks();
+      acknowledge("Task added");
       if (!getSettings().token) {
         setQueuedStatus();
       } else {
-        setStatus("Task added.", "ok");
+        setStatus("");
         await syncNow();
         if (await updatePendingBadge()) setQueuedStatus();
+        else setStatus("");
       }
     } catch (err) {
       console.error(err);
@@ -1169,7 +1229,8 @@ els.submitBtn.addEventListener("click", async () => {
     try {
       await capturePrayerRequest(text, state.category);
       els.entryText.value = "";
-      setStatus("Added to the Prayer List.", "ok");
+      setStatus("");
+      acknowledge("Prayer added");
     } catch (err) {
       console.error(err);
       setStatus("Couldn't save that prayer — try again.", "err");
@@ -1198,9 +1259,12 @@ els.submitBtn.addEventListener("click", async () => {
   els.submitBtn.disabled = false;
 
   if (outcome === "sent") {
-    setStatus("Captured.", "ok");
+    setStatus("");
+    acknowledge();
     if (entry.type === "note") await loadRecentNotes();
   } else if (outcome === "queued") {
+    // Safe on the phone, just not sent yet: still worth the check.
+    acknowledge();
     setQueuedStatus();
     if (!getSettings().token) openSettings();
   } else if (!getSettings().token) {
@@ -1375,7 +1439,10 @@ renderCheckinChips();
 initTasks();
 // Re-check on return to the app, so yesterday's marks clear after midnight.
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") refreshCheckinMarks();
+  if (document.visibilityState === "visible") {
+    refreshCheckinMarks();
+    renderTodayTitle();
+  }
 });
 
 // Cmd/Ctrl+Enter submits from the textarea.
