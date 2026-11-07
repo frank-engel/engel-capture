@@ -33,6 +33,12 @@
     --err: #eb5757;
     --border: #38383f;
     --backdrop: rgba(0,0,0,0.6);
+    /* Colors with one meaning each: --accent = act (Capture, Save),
+       --ok = done (tasks, check-ins), --prayer = prayer, --err = errors only. */
+    --ok-text: #10101a;
+    --prayer: #e2b25c;
+    --prayer-text: #1b1406;
+    --seg-active: #3a3a42;
   }
   @media (prefers-color-scheme: light) {
     :root:not([data-theme="dark"]) {
@@ -49,6 +55,10 @@
       --err: #c0392b;
       --border: #ddd6ca;
       --backdrop: rgba(40,34,26,0.35);
+    --ok-text: #ffffff;
+    --prayer: #a3640c;
+    --prayer-text: #ffffff;
+    --seg-active: #ffffff;
     }
   }
   :root[data-theme="light"] {
@@ -65,6 +75,10 @@
     --err: #c0392b;
     --border: #ddd6ca;
     --backdrop: rgba(40,34,26,0.35);
+    --ok-text: #ffffff;
+    --prayer: #a3640c;
+    --prayer-text: #ffffff;
+    --seg-active: #ffffff;
   }
   * { box-sizing: border-box; }
   html, body {
@@ -104,12 +118,12 @@
     border: 1px solid var(--border); background: var(--panel); color: var(--text);
   }
   #prayerStatus { font-size: 0.88rem; text-align: center; min-height: 1.2em; }
-  #prayerStatus.ok { color: var(--ok); } #prayerStatus.err { color: var(--err); } #prayerStatus.pending { color: var(--muted); }
+  #prayerStatus.ok { color: var(--muted); } #prayerStatus.err { color: var(--err); } #prayerStatus.pending { color: var(--muted); }
   .prayer-banner { border: 1px solid var(--err); border-radius: 10px; padding: 10px 12px; font-size: 0.88rem; }
   .prayer-banner p { margin: 0 0 8px; line-height: 1.4; }
   .banner-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   #prayerContent { display: flex; flex-direction: column; gap: 8px; }
-  #prayerContent h2 { font-size: 0.95rem; margin: 14px 0 0; color: var(--accent); }
+  #prayerContent h2 { font-size: 0.95rem; margin: 14px 0 0; color: var(--prayer); }
   #prayerContent h2:first-child { margin-top: 0; }
   #prayerContent p.muted { color: var(--muted); font-size: 0.85rem; margin: 0; }
   .prayer-import { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
@@ -127,11 +141,11 @@
     display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
   }
   .prayer-summary.expanded { -webkit-line-clamp: unset; display: block; }
-  .prayer-closed { font-size: 0.85rem; color: var(--ok); }
-  .prayer-card.touched { border-color: var(--ok); border-left-width: 4px; }
-  .prayer-today { font-size: 0.78rem; color: var(--ok); font-weight: 600; white-space: nowrap; }
-  #prayerView button.done-btn { background: transparent; color: var(--ok); border-color: var(--ok); }
-  .prayer-progress { font-size: 0.85rem; color: var(--ok); text-align: center; }
+  .prayer-closed { font-size: 0.85rem; color: var(--prayer); }
+  .prayer-card.touched { border-color: var(--prayer); border-left-width: 4px; }
+  .prayer-today { font-size: 0.78rem; color: var(--prayer); font-weight: 600; white-space: nowrap; }
+  #prayerView button.done-btn { background: transparent; color: var(--prayer); border-color: var(--prayer); }
+  .prayer-progress { font-size: 0.85rem; color: var(--prayer); text-align: center; }
   .prayer-updates { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 3px; }
   .prayer-updates li { font-size: 0.85rem; line-height: 1.35; }
   .update-date { color: var(--muted); font-size: 0.78rem; }
@@ -156,7 +170,7 @@
     border-radius: 8px; padding: 7px 8px; font-family: inherit;
   }
   .composer-actions { display: flex; gap: 8px; justify-content: flex-end; }
-  .prayer-answered summary { cursor: pointer; color: var(--accent); font-size: 0.95rem; font-weight: 700; margin: 14px 0 8px; }
+  .prayer-answered summary { cursor: pointer; color: var(--prayer); font-size: 0.95rem; font-weight: 700; margin: 14px 0 8px; }
   .prayer-answered .prayer-card { margin-bottom: 8px; opacity: 0.85; }
   dialog textarea { min-height: 90px; margin-top: 4px; background: var(--bg); }
   dialog select {
@@ -180,9 +194,25 @@
   }
   .chip.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
 
+  /* Journal / Prayer / Note (and the prayer categories) as a slim segmented
+     control: it says which page you're on without competing with the box. */
+  #typeRow, #categoryRow {
+    flex-wrap: nowrap; gap: 2px; padding: 3px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  }
+  #typeRow .chip, #categoryRow .chip {
+    flex: 1 1 0; border: none; background: transparent; color: var(--muted);
+    padding: 6px 4px; font-size: 0.88rem; border-radius: 7px;
+  }
+  #typeRow .chip.active, #categoryRow .chip.active {
+    background: var(--seg-active); color: var(--text); font-weight: 600;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+  }
+  #typeRow .chip.active[data-type="prayer"], #categoryRow .chip.active { color: var(--prayer); }
+
   #categoryRow { display: none; }
   #categoryRow.show { display: flex; }
-  #categoryRow .chip { flex-basis: 20%; font-size: 0.82rem; padding: 8px 6px; }
+  #categoryRow .chip { font-size: 0.8rem; padding: 5px 4px; }
 
   #taskFields { display: none; flex-direction: column; gap: 10px; }
   #taskFields.show { display: flex; }
@@ -272,13 +302,15 @@
   #todayTasks { display: flex; flex-direction: column; gap: 6px; }
   #todayTasks[hidden] { display: none; }
   .today-label { font-size: 0.82rem; color: var(--muted); }
-  #todayList, #laterList { display: flex; flex-direction: column; gap: 6px; }
-  #laterList[hidden] { display: none; }
+  #todayList, #laterList, #doneList { display: flex; flex-direction: column; }
+  #laterList[hidden], #doneList[hidden] { display: none; }
+  /* Simple rows with a hairline between, not a box per task. */
   .task-item {
     display: flex; align-items: center; gap: 10px;
-    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
-    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    padding: 9px 2px;
   }
+  #todayList > .task-item:last-child, #laterList > .task-item:last-child, #doneList > .task-item:last-child { border-bottom: none; }
   .task-item input[type="checkbox"] { width: 20px; height: 20px; margin: 0; flex: none; accent-color: var(--ok); }
   .task-text { flex: 1; font-size: 0.92rem; line-height: 1.35; cursor: pointer; overflow-wrap: anywhere; }
   .task-item.done .task-text { color: var(--muted); text-decoration: line-through; }
@@ -287,7 +319,7 @@
     background: transparent; color: var(--accent); border: 1px solid var(--border);
     border-radius: 999px; padding: 3px 10px; font-size: 0.75rem; cursor: pointer;
   }
-  .task-empty { margin: 0; font-size: 0.85rem; color: var(--muted); }
+  .task-empty { margin: 0; padding: 4px 2px; font-size: 0.85rem; color: var(--muted); }
   .later-btn {
     align-self: flex-start; background: none; border: none; color: var(--muted);
     font-size: 0.85rem; padding: 4px 0; cursor: pointer;
@@ -297,14 +329,17 @@
   #checkinRow { display: none; align-items: center; }
   #checkinRow.show { display: flex; }
   #checkinRow .checkin-label { font-size: 0.82rem; color: var(--muted); margin-right: 2px; }
-  #checkinRow .chip { flex: 0 1 auto; font-size: 0.82rem; padding: 7px 12px; color: var(--muted); }
+  #checkinRow .chip {
+    flex: 0 1 auto; font-size: 0.8rem; padding: 5px 12px; border-radius: 999px;
+    background: transparent; color: var(--muted);
+  }
   #checkinRow .chip:active { background: var(--accent); color: var(--accent-text); }
-  #checkinRow .chip.done { color: var(--ok); border-color: var(--ok); font-weight: 600; }
+  #checkinRow .chip.done { background: var(--ok); color: var(--ok-text); border-color: var(--ok); font-weight: 600; }
 
   #status a { color: var(--accent); }
 
   #status { min-height: 1.4em; font-size: 0.9rem; text-align: center; }
-  #status.ok { color: var(--ok); }
+  #status.ok { color: var(--muted); }
   #status.err { color: var(--err); }
   #status.pending { color: var(--muted); }
 
@@ -412,6 +447,8 @@
   <section id="todayTasks" aria-label="Today's tasks">
     <div class="today-label">Today</div>
     <div id="todayList"></div>
+    <button id="doneBtn" class="later-btn" hidden></button>
+    <div id="doneList" hidden></div>
     <button id="laterBtn" class="later-btn" hidden></button>
     <div id="laterList" hidden></div>
   </section>
