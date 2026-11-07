@@ -2,7 +2,7 @@
 // a flaky connection. Never touches the GitHub API calls (different origin,
 // and we skip caching anything but the static shell below).
 
-const CACHE = "engel-capture-v11";
+const CACHE = "engel-capture-v12";
 const SHELL = ["./", "./index.html", "./app.js", "./prayer.js", "./tasks.js", "./manifest.json", "./icon.svg"];
 
 self.addEventListener("install", (event) => {

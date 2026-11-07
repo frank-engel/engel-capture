@@ -46,6 +46,7 @@ const els = {
   pendingCount: document.getElementById("pendingCount"),
   checkinRow: document.getElementById("checkinRow"),
   oneByOneInput: document.getElementById("oneByOneInput"),
+  practiceInputs: [1, 2, 3].map((n) => document.getElementById(`practice${n}Input`)),
 };
 
 // ---------- settings ----------
@@ -65,6 +66,8 @@ function openSettings() {
   els.ownerInput.value = s.owner;
   els.repoInput.value = s.repo;
   els.oneByOneInput.checked = s.oneByOne;
+  const labels = getPractices().map((p) => p.label);
+  els.practiceInputs.forEach((input, i) => { input.value = labels[i] || ""; });
   els.settingsDialog.showModal();
 }
 
@@ -83,6 +86,7 @@ els.saveSettingsBtn.addEventListener("click", (e) => {
   localStorage.setItem("ec_owner", els.ownerInput.value.trim() || DEFAULT_OWNER);
   localStorage.setItem("ec_repo", els.repoInput.value.trim() || DEFAULT_REPO);
   localStorage.setItem("ec_one_by_one", els.oneByOneInput.checked ? "1" : "0");
+  savePracticeLabels(els.practiceInputs.map((input) => input.value));
   els.settingsDialog.close();
   setStatus("Settings saved.", "ok");
   updateNavVisibility();
@@ -988,6 +992,7 @@ async function runSync() {
     await updatePendingBadge();
     return sent;
   }
+  pushVaultSettingsIfNeeded().catch((err) => console.error(err));
   try {
     const run = async () => {
       const entries = await pendingEntries();
@@ -1214,11 +1219,83 @@ els.submitBtn.addEventListener("click", async () => {
 // the box becomes the line's text instead of the default sentence. The send
 // waits a few seconds so a mis-tap can be undone.
 
-const CHECKINS = {
-  "daily-office": { label: "Daily Office", text: "Did the Daily Office." },
-  lectio: { label: "Lectio", text: "Did Lectio Divina." },
-  workout: { label: "Workout", text: "Worked out." },
+// Which practices get a chip is a setting (up to 3). The tag is a slug of
+// the label, so "Daily Office", "Lectio" and "Workout" keep the tags they
+// have always had, and the weekly review keeps counting the same way.
+const MAX_PRACTICES = 3;
+const PRACTICES_KEY = "ec_practices";
+const DEFAULT_PRACTICES = ["Daily Office", "Lectio", "Workout"];
+const PRACTICE_TEXT = {
+  "daily-office": "Did the Daily Office.",
+  lectio: "Did Lectio Divina.",
+  workout: "Worked out.",
 };
+
+function practiceKey(label) {
+  return label.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "practice";
+}
+
+function getPractices() {
+  let labels = DEFAULT_PRACTICES;
+  try {
+    const saved = JSON.parse(localStorage.getItem(PRACTICES_KEY) || "null");
+    if (Array.isArray(saved)) labels = saved;
+  } catch { /* bad value: use the defaults */ }
+  const seen = new Set();
+  const out = [];
+  for (const raw of labels) {
+    const label = String(raw).trim();
+    const key = label && practiceKey(label);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ key, label, text: PRACTICE_TEXT[key] || `Checked in: ${label}.` });
+    if (out.length === MAX_PRACTICES) break;
+  }
+  return out;
+}
+
+function savePracticeLabels(labels) {
+  const before = JSON.stringify(getPractices());
+  localStorage.setItem(PRACTICES_KEY, JSON.stringify(labels.map((l) => l.trim()).filter(Boolean)));
+  if (JSON.stringify(getPractices()) !== before) {
+    localStorage.setItem(VAULT_SETTINGS_DIRTY_KEY, "1");
+    renderCheckinChips();
+  }
+}
+
+function renderCheckinChips() {
+  for (const chip of els.checkinRow.querySelectorAll(".chip")) chip.remove();
+  for (const p of getPractices()) {
+    const chip = document.createElement("div");
+    chip.className = "chip";
+    chip.dataset.practice = p.key;
+    chip.textContent = p.label;
+    els.checkinRow.appendChild(chip);
+  }
+  els.checkinRow.querySelector(".checkin-label").hidden = !getPractices().length;
+  refreshCheckinMarks();
+}
+
+// The evening check-in runs in the vault (a GitHub Action), so it needs the
+// practice list too. It lives in .journal-app/settings.json, written on its
+// own whenever the list changes and retried on later syncs until it lands.
+const VAULT_SETTINGS_PATH = ".journal-app/settings.json";
+const VAULT_SETTINGS_DIRTY_KEY = "ec_vault_settings_dirty";
+
+async function pushVaultSettingsIfNeeded() {
+  // Unset counts as dirty, so the file is written once even if the list
+  // is never edited.
+  if (localStorage.getItem(VAULT_SETTINGS_DIRTY_KEY) === "0" || !getSettings().token) return;
+  const content = JSON.stringify({
+    practices: getPractices().map(({ key, label }) => ({ key, label })),
+    updated_at: new Date().toISOString(),
+  }, null, 2) + "\n";
+  const existing = await getFile(VAULT_SETTINGS_PATH);
+  await putFile(VAULT_SETTINGS_PATH, content, existing && existing.sha, "App settings: daily practices");
+  localStorage.setItem(VAULT_SETTINGS_DIRTY_KEY, "0");
+}
+
 const CHECKIN_UNDO_MS = 5000;
 
 function setStatusWithUndo(msg, onUndo) {
@@ -1253,7 +1330,8 @@ async function refreshCheckinMarks() {
     const key = chip.dataset.practice;
     const isDone = done.has(key);
     chip.classList.toggle("done", isDone);
-    chip.textContent = (isDone ? "✓ " : "") + CHECKINS[key].label;
+    const practice = getPractices().find((p) => p.key === key);
+    chip.textContent = (isDone ? "✓ " : "") + (practice ? practice.label : key);
   }
 }
 
@@ -1261,7 +1339,8 @@ els.checkinRow.addEventListener("click", async (e) => {
   const chip = e.target.closest(".chip");
   if (!chip) return;
   const key = chip.dataset.practice;
-  const practice = CHECKINS[key];
+  const practice = getPractices().find((p) => p.key === key);
+  if (!practice) return;
   const typed = els.entryText.value.trim();
   const entry = buildEntry({ type: "journal", body: typed || practice.text, tags: [`practice/${key}`] });
 
@@ -1292,7 +1371,7 @@ els.checkinRow.addEventListener("click", async (e) => {
   });
 });
 
-refreshCheckinMarks();
+renderCheckinChips();
 initTasks();
 // Re-check on return to the app, so yesterday's marks clear after midnight.
 document.addEventListener("visibilitychange", () => {

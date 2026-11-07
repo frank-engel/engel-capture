@@ -260,6 +260,7 @@
   }
   dialog label.checkbox-row { display: flex; align-items: center; gap: 8px; color: var(--text); }
   dialog label.checkbox-row input { width: auto; margin: 0; }
+  dialog input.practice-input { margin-top: 6px; }
   dialog p.help { font-size: 0.78rem; color: var(--muted); line-height: 1.4; }
   .dialog-actions { display: flex; gap: 8px; margin-top: 18px; justify-content: flex-end; }
   .dialog-actions button {
@@ -334,9 +335,6 @@
 
   <div class="chip-row show" id="checkinRow">
     <span class="checkin-label">Check in:</span>
-    <div class="chip" data-practice="daily-office">Daily Office</div>
-    <div class="chip" data-practice="lectio">Lectio</div>
-    <div class="chip" data-practice="workout">Workout</div>
   </div>
 
   <div id="status"></div>
@@ -423,6 +421,11 @@
   <input id="ownerInput" type="text" placeholder="frank-engel">
   <label for="repoInput">Repo name</label>
   <input id="repoInput" type="text" placeholder="Engel-Personal">
+  <label for="practice1Input">Daily practices (up to 3)</label>
+  <input id="practice1Input" class="practice-input" type="text" placeholder="e.g. Daily Office">
+  <input id="practice2Input" class="practice-input" type="text" placeholder="e.g. Lectio">
+  <input id="practice3Input" class="practice-input" type="text" placeholder="e.g. Workout">
+  <p class="help">These are the Check in chips. Leave a box empty for fewer. The evening check-in reads this list from the vault.</p>
   <label class="checkbox-row"><input type="checkbox" id="oneByOneInput"> Send each capture separately (the old way)</label>
   <p class="help">Off: everything waiting goes to the vault as one commit. On: one commit per capture, exactly like before the local database. A fallback if syncing ever misbehaves.</p>
   <p class="help">Stored only in this browser's local storage. Create a fine-grained token scoped to Contents: Read and write on this one repo only, at github.com/settings/personal-access-tokens.</p>
