@@ -707,6 +707,10 @@ function matchesSearch(req, person, ups, q) {
 function renderComposer(req) {
   const box = el("div", "prayer-composer");
   const ta = el("textarea");
+  // Ask the phone keyboard for spell check, autocorrect and sentence caps.
+  ta.spellcheck = true;
+  ta.setAttribute("autocorrect", "on");
+  ta.setAttribute("autocapitalize", "sentences");
   ta.placeholder = "What's new? (Leave blank to just mark that you prayed today.)";
   ta.rows = 3;
   const row = el("div", "composer-row");
