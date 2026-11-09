@@ -458,7 +458,7 @@
     </div>
   </div>
 
-  <textarea id="entryText" placeholder="Type it and go." autofocus></textarea>
+  <textarea id="entryText" spellcheck="true" autocorrect="on" autocapitalize="sentences" placeholder="Type it and go." autofocus></textarea>
 
   <div class="submit-row">
     <button id="taskToggle" class="task-toggle" aria-pressed="false" title="Make this capture a task">&#9744; Task</button>
@@ -513,11 +513,11 @@
 <dialog id="prayerRequestDialog">
   <h2 id="prayerReqTitle">New prayer</h2>
   <label for="prayerReqPerson">Who (optional)</label>
-  <input id="prayerReqPerson" type="text" list="prayerPersonList" autocomplete="off" placeholder="Jordan, Minerva &amp; Bill…">
+  <input id="prayerReqPerson" type="text" list="prayerPersonList" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="words" placeholder="Jordan, Minerva &amp; Bill…">
   <label for="prayerReqRelation">Relation (optional)</label>
-  <input id="prayerReqRelation" type="text" autocomplete="off" placeholder="Scott's wife">
+  <input id="prayerReqRelation" type="text" spellcheck="true" autocorrect="on" autocapitalize="sentences" placeholder="Scott's wife">
   <label for="prayerReqVia">Shared by (optional)</label>
-  <input id="prayerReqVia" type="text" autocomplete="off" placeholder="Nancy">
+  <input id="prayerReqVia" type="text" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="words" placeholder="Nancy">
   <label for="prayerReqCategory">Category</label>
   <select id="prayerReqCategory">
     <option value="people">People</option>
@@ -526,7 +526,7 @@
     <option value="praise">Praise</option>
   </select>
   <label for="prayerReqSummary">Prayer</label>
-  <textarea id="prayerReqSummary" rows="4" placeholder="What are we praying for?"></textarea>
+  <textarea id="prayerReqSummary" rows="4" spellcheck="true" autocorrect="on" autocapitalize="sentences" placeholder="What are we praying for?"></textarea>
   <div id="prayerReqDateField">
     <label for="prayerReqDate">Date</label>
     <input id="prayerReqDate" type="date">
@@ -550,7 +550,7 @@
 <dialog id="prayerCloseDialog">
   <h2 id="prayerCloseTitle">Mark answered</h2>
   <label for="prayerCloseNote">Note</label>
-  <input id="prayerCloseNote" type="text" autocomplete="off">
+  <input id="prayerCloseNote" type="text" spellcheck="true" autocorrect="on" autocapitalize="sentences">
   <label for="prayerCloseDate">Date</label>
   <input id="prayerCloseDate" type="date">
   <div class="dialog-actions">
@@ -574,9 +574,9 @@
     <option value="dark">Dark</option>
   </select>
   <label for="practice1Input">Daily practices (up to 3)</label>
-  <input id="practice1Input" class="practice-input" type="text" placeholder="e.g. Daily Office">
-  <input id="practice2Input" class="practice-input" type="text" placeholder="e.g. Lectio">
-  <input id="practice3Input" class="practice-input" type="text" placeholder="e.g. Workout">
+  <input id="practice1Input" class="practice-input" type="text" spellcheck="true" autocorrect="on" autocapitalize="sentences" placeholder="e.g. Daily Office">
+  <input id="practice2Input" class="practice-input" type="text" spellcheck="true" autocorrect="on" autocapitalize="sentences" placeholder="e.g. Lectio">
+  <input id="practice3Input" class="practice-input" type="text" spellcheck="true" autocorrect="on" autocapitalize="sentences" placeholder="e.g. Workout">
   <p class="help">These are the Check in chips. Leave a box empty for fewer. The evening check-in reads this list from the vault.</p>
   <label class="checkbox-row"><input type="checkbox" id="oneByOneInput"> Send each capture separately (the old way)</label>
   <p class="help">Off: everything waiting goes to the vault as one commit. On: one commit per capture, exactly like before the local database. A fallback if syncing ever misbehaves.</p>
